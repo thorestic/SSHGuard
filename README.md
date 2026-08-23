@@ -11,11 +11,15 @@ The system monitors OpenSSH authentication events in real time through the syste
 
 The project is currently deployed and tested on a Raspberry Pi 4 running Debian 13.
 
+---
+
 ## Team
 
 - Mohammed Jumaa Al-Tahla
 - Nada
 - Doha
+
+---
 
 ## Current Features
 
@@ -36,6 +40,8 @@ The project is currently deployed and tested on a Raspberry Pi 4 running Debian 
 - Tailscale management-path protection
 - Synthetic detector testing
 - Real end-to-end SSH testing
+
+---
 
 ## Architecture
 
@@ -67,6 +73,8 @@ Firewall Manager
 nftables Temporary Block
 ```
 
+---
+
 ## How Detection Works
 
 SSHGuard tracks failed SSH authentication attempts independently for each source IP address.
@@ -74,9 +82,9 @@ SSHGuard tracks failed SSH authentication attempts independently for each source
 The detector uses two main values:
 
 - **Threshold**: The number of failed authentication attempts required to trigger detection.
-- **Time Window**: The period of time during which those attempts must occur.
+- **Time Window**: The period of time during which those failed attempts must occur.
 
-For example:
+Example configuration:
 
 ```text
 Threshold: 3 attempts
@@ -85,7 +93,9 @@ Time Window: 20 seconds
 
 If the same source IP generates three failed SSH authentication attempts within 20 seconds, SSHGuard creates a brute-force incident.
 
-SSHGuard uses a sliding time window. Old authentication attempts that fall outside the active time window are automatically removed from the current calculation.
+SSHGuard uses a **sliding time window**.
+
+Old authentication attempts that fall outside the active time window are automatically removed from the current calculation.
 
 Example:
 
@@ -95,7 +105,14 @@ Example:
 10:00:12 Failed
 ```
 
-If the configured threshold is 3 attempts within 20 seconds:
+With the following configuration:
+
+```text
+Threshold: 3
+Time Window: 20 seconds
+```
+
+the result is:
 
 ```text
 3 failed attempts
@@ -104,9 +121,22 @@ within 20 seconds
 Brute-force detected
 ```
 
+Attempts are tracked separately for each source IP.
+
+For example:
+
+```text
+192.168.0.10 → 2 failures
+192.168.0.11 → 1 failure
+```
+
+These are not combined into three attempts because they originate from different source IP addresses.
+
+---
+
 ## SSH Event Processing
 
-Raw OpenSSH authentication messages are read from the systemd journal.
+Raw OpenSSH authentication messages are read directly from the systemd journal.
 
 Example raw event:
 
@@ -114,7 +144,7 @@ Example raw event:
 Failed password for user from 192.168.0.11 port 50500 ssh2
 ```
 
-The parser converts this raw message into a normalized event containing information such as:
+The SSH Event Parser converts the raw message into a normalized event containing structured information such as:
 
 ```text
 event_type
@@ -125,7 +155,25 @@ timestamp
 invalid_user
 ```
 
-This separation allows the Detection Engine to work with structured security events instead of parsing raw log messages directly.
+This allows the Detection Engine to operate on structured events instead of processing raw OpenSSH text directly.
+
+The architecture separates responsibilities:
+
+```text
+Raw SSH Log
+    ↓
+SSH Event Parser
+    ↓
+Normalized Event
+    ↓
+Detection Engine
+```
+
+The Parser identifies what happened.
+
+The Detection Engine decides whether the observed behavior represents brute-force activity.
+
+---
 
 ## Events Currently Monitored
 
@@ -135,9 +183,62 @@ SSHGuard currently recognizes:
 - Successful password authentication
 - Invalid username attempts
 
-Failed authentication events are passed to the brute-force detector.
+Failed authentication events are passed to the brute-force Detection Engine.
 
-Successful login events are monitored and displayed but are not counted toward the brute-force detection threshold.
+Successful login events are monitored and displayed but are not counted toward the brute-force threshold.
+
+SSHGuard also avoids counting multiple raw log messages representing the same authentication attempt as separate failed attempts.
+
+---
+
+## Detection Engine
+
+The Detection Engine maintains temporary state for each source IP.
+
+Conceptually:
+
+```text
+192.168.0.10
+├── 10:00:01
+├── 10:00:07
+└── 10:00:13
+
+192.168.0.11
+├── 10:00:04
+└── 10:00:11
+```
+
+When a new failed login arrives, the detector:
+
+1. Identifies the source IP.
+2. Adds the new event timestamp to that IP's state.
+3. Calculates the beginning of the current sliding time window.
+4. Removes failed attempts older than the active window.
+5. Counts the remaining attempts.
+6. Compares the count to the configured threshold.
+7. Generates a brute-force incident if the threshold has been reached.
+
+---
+
+## Duplicate Incident Suppression
+
+SSHGuard prevents repeated alerts from being created for every additional failed attempt during the same continuous attack.
+
+Example:
+
+```text
+Attempt 1 → 1/3
+Attempt 2 → 2/3
+Attempt 3 → 3/3 → INCIDENT CREATED
+Attempt 4 → INCIDENT ALREADY ACTIVE
+Attempt 5 → INCIDENT ALREADY ACTIVE
+```
+
+This reduces unnecessary alert duplication.
+
+When the attack activity falls below the configured detection threshold after the sliding window advances, the previous incident can become inactive and the source can later generate a new incident if another attack begins.
+
+---
 
 ## Automated Firewall Response
 
@@ -145,7 +246,7 @@ SSHGuard supports two response modes.
 
 ### Dry-Run Mode
 
-The system detects brute-force activity and reports the action that would have been performed, but it does not modify the firewall.
+The system detects brute-force activity and reports what action would have been performed, but it does not modify the firewall.
 
 Example:
 
@@ -153,13 +254,17 @@ Example:
 [DRY RUN] Would block IP: 192.168.0.11 for 60 seconds
 ```
 
+Dry-Run mode is useful during development and testing because it allows detection logic to be validated safely before enabling real firewall modifications.
+
+---
+
 ### Real Mode
 
-When real response mode is enabled, SSHGuard creates and manages its own nftables firewall table.
+When Real mode is enabled, SSHGuard creates and manages its own nftables firewall table.
 
 A detected source IPv4 address is inserted into a temporary nftables set.
 
-SSH traffic from that source to the protected SSH port is dropped.
+SSH traffic from the blocked source IP to the configured protected SSH port is dropped.
 
 Example:
 
@@ -167,36 +272,60 @@ Example:
 [FIREWALL] BLOCKED 192.168.0.11 for 60 seconds
 ```
 
-The block automatically expires after the configured timeout.
+The blocked IP is automatically removed after the configured timeout.
 
-This means the Python application does not need to manually sleep and later remove the firewall rule.
+---
 
-The Linux kernel and nftables handle the expiration automatically.
+## Automatic Block Expiration
+
+SSHGuard uses nftables timeout functionality.
+
+Instead of making Python wait and manually remove the firewall rule later, nftables itself manages block expiration.
+
+Conceptually:
+
+```text
+IP added to blocked set
+        ↓
+Temporary timeout begins
+        ↓
+SSH traffic is dropped
+        ↓
+Timeout expires
+        ↓
+IP automatically removed
+```
+
+This design improves reliability because the temporary firewall block can still expire even if the Python process stops after applying the block.
+
+---
 
 ## Firewall Safety
 
-SSHGuard uses its own nftables table:
+SSHGuard manages its own nftables table:
 
 ```text
 inet sshguard
 ```
 
-The project does not flush or replace existing firewall configurations.
+The project does not flush or replace the complete system firewall.
 
-This helps avoid interfering with:
+This prevents SSHGuard from unnecessarily interfering with existing configurations such as:
 
 - UFW
 - Docker networking
 - Tailscale
-- Other existing firewall rules
+- Other firewall rules
 
 The current firewall architecture also excludes traffic arriving through the Tailscale interface from SSHGuard blocking.
 
 Tailscale is currently used as an administrative and recovery path.
 
-## Real Test Scenario
+---
 
-The system has been tested using the following configuration:
+## Real Test Configuration
+
+The current end-to-end testing configuration uses:
 
 ```text
 Threshold: 3 failed attempts
@@ -205,18 +334,93 @@ Block Duration: 60 seconds
 Protected SSH Port: 22
 ```
 
-During testing:
+These values are currently configured for testing and demonstration purposes and can be modified.
+
+---
+
+## Real Test Scenario
+
+During controlled testing:
 
 1. A client generated three failed SSH authentication attempts.
-2. SSHGuard detected that the configured threshold had been reached.
-3. A brute-force security incident was created.
-4. The attacking source IP was added to the nftables temporary block set.
-5. New SSH connections from the blocked client timed out.
-6. The source IP remained blocked for the configured duration.
-7. nftables automatically removed the IP after the timeout.
-8. SSH connectivity became available again after the block expired.
+2. SSHGuard received the events from the OpenSSH systemd journal.
+3. The SSH Event Parser normalized the events.
+4. The Detection Engine tracked the attempts for the source IP.
+5. The configured threshold was reached inside the 20-second sliding time window.
+6. A brute-force incident was generated.
+7. The source IP was automatically added to the nftables temporary block set.
+8. New SSH connections from the blocked source timed out.
+9. The source remained blocked for the configured 60-second duration.
+10. nftables automatically removed the source IP after the timeout.
+11. SSH connectivity became available again.
 
-Example detection output:
+---
+
+## Testing Evidence
+
+The following screenshots demonstrate the real end-to-end behavior of SSHGuard during controlled testing.
+
+### 1. Brute-Force Detection and Automatic Blocking
+
+SSHGuard detected three failed SSH authentication attempts from the same source IP within the configured 20-second sliding time window.
+
+The system generated a brute-force incident and automatically blocked the source IP for 60 seconds.
+
+![Brute-Force Detection](docs/screenshots/01-brute-force-detected.png)
+
+---
+
+### 2. SSH Connection Blocked
+
+After the firewall response was applied, new SSH connections from the blocked client were no longer able to reach the SSH service.
+
+![SSH Connection Blocked](docs/screenshots/02-ssh-connection-blocked.png)
+
+---
+
+### 3. nftables Block Lifecycle
+
+The attacking source IP appeared inside the SSHGuard `blocked_ipv4` nftables set with an active expiration timer.
+
+After the configured block duration expired, nftables automatically removed the IP from the set.
+
+![nftables Block Lifecycle](docs/screenshots/03-nftables-block-lifecycle.png)
+
+---
+
+### 4. SSH Connectivity Restored
+
+After the temporary firewall block expired, the same client was able to reach the SSH authentication prompt again.
+
+![SSH Connectivity Restored](docs/screenshots/04-ssh-connectivity-restored.png)
+
+---
+
+## Validation Result
+
+The controlled test successfully validated the complete SSHGuard response lifecycle:
+
+```text
+Failed SSH Authentication Attempts
+        ↓
+Sliding Window Detection
+        ↓
+Brute-Force Incident
+        ↓
+Automatic nftables Block
+        ↓
+SSH Connection Prevented
+        ↓
+Automatic Block Expiration
+        ↓
+SSH Connectivity Restored
+```
+
+This confirms that SSHGuard successfully detects repeated SSH authentication failures, applies a temporary automated firewall response, and restores connectivity after the configured timeout.
+
+---
+
+## Example Detection Output
 
 ```text
 [FAILED LOGIN] IP=192.168.0.11 USER=mc
@@ -228,21 +432,27 @@ Example detection output:
 [FAILED LOGIN] IP=192.168.0.11 USER=mc
 [DETECTOR] IP=192.168.0.11 ATTEMPTS=3/3
 
+======================================
 [!!!] BRUTE FORCE DETECTED
-
-Source IP: 192.168.0.11
-Attempts: 3
+--------------------------------------
+Source IP:   192.168.0.11
+Username:    mc
+Attempts:    3
+Time Window: 20 seconds
+======================================
 
 [FIREWALL] BLOCKED 192.168.0.11 for 60 seconds
 ```
 
-While the block was active:
+While the block is active:
 
 ```text
 ssh: connect to host 192.168.0.8 port 22: Connection timed out
 ```
 
-After the firewall timeout expired, SSH access became available again.
+After the configured timeout expires, SSH connectivity becomes available again.
+
+---
 
 ## Project Structure
 
@@ -258,29 +468,39 @@ sshguard/
 ├── tests/
 │   ├── __init__.py
 │   └── test_detector.py
+├── docs/
+│   └── screenshots/
+│       ├── 01-brute-force-detected.png
+│       ├── 02-ssh-connection-blocked.png
+│       ├── 03-nftables-block-lifecycle.png
+│       └── 04-ssh-connectivity-restored.png
 ├── .gitignore
 └── README.md
 ```
+
+---
 
 ## Main Components
 
 ### `main.py`
 
-Main application entry point.
+The main application entry point.
 
 Responsibilities:
 
-- Initializes the detector
-- Initializes the firewall manager
-- Starts SSH event monitoring
-- Displays normalized events
+- Initializes the Detection Engine
+- Initializes the Firewall Manager
+- Starts real-time SSH event monitoring
+- Displays normalized authentication events
 - Sends events to the Detection Engine
-- Processes detected security incidents
-- Triggers the configured response
+- Processes detected brute-force incidents
+- Triggers the configured automated response
+
+---
 
 ### `config.py`
 
-Stores configurable project settings.
+Stores configurable SSHGuard settings.
 
 Current configuration includes:
 
@@ -291,47 +511,64 @@ Current configuration includes:
 - Response mode
 - Whitelisted management networks
 
+---
+
 ### `core/log_parser.py`
 
 Responsible for:
 
-- Reading OpenSSH events from systemd journal
-- Parsing SSH authentication messages
-- Extracting relevant information
-- Converting raw logs into normalized events
+- Reading OpenSSH events from the systemd journal
+- Parsing authentication messages
+- Detecting failed authentication events
+- Detecting successful authentication events
+- Detecting invalid usernames
+- Extracting source information
+- Creating normalized SSH events
+
+---
 
 ### `core/detector.py`
 
 Responsible for:
 
 - Tracking failed login attempts per source IP
-- Maintaining sliding time-window state
-- Removing expired attempts
+- Maintaining per-IP state
+- Applying sliding time-window logic
+- Removing expired authentication attempts
 - Comparing attempt counts against the configured threshold
 - Generating brute-force incidents
-- Suppressing repeated incidents during the same continuous attack
+- Suppressing duplicate incidents during the same continuous attack
+
+---
 
 ### `core/firewall.py`
 
 Responsible for:
 
-- Managing SSHGuard's nftables configuration
-- Protecting configured management paths
-- Blocking malicious source IP addresses
-- Using temporary nftables timeout sets
+- Managing the SSHGuard nftables table
 - Supporting Dry-Run and Real response modes
+- Checking whitelisted management networks
+- Temporarily blocking malicious source IPs
+- Protecting the configured SSH service
+- Supporting automatic timeout-based block expiration
 - Supporting manual unblock operations
+
+---
 
 ### `tests/test_detector.py`
 
 Contains synthetic tests for the Detection Engine.
 
-These tests allow the detector logic to be validated independently from:
+The detector can therefore be tested independently from:
 
 - OpenSSH
 - systemd journal
-- Network traffic
+- Real network traffic
 - Firewall rules
+
+This helps isolate Detection Engine bugs from other system components.
+
+---
 
 ## Requirements
 
@@ -349,21 +586,23 @@ Real firewall response requires elevated privileges.
 
 No third-party Python packages are currently required by the core SSHGuard implementation.
 
+---
+
 ## Running SSHGuard
 
-Clone or enter the project directory:
+Enter the project directory:
 
 ```bash
 cd sshguard
 ```
 
-Run the application:
+Run SSHGuard:
 
 ```bash
 sudo python3 main.py
 ```
 
-When SSHGuard starts, it displays the current configuration.
+When SSHGuard starts, the current configuration is displayed.
 
 Example:
 
@@ -381,15 +620,17 @@ SSH Port:        22
 Response Mode:   REAL
 ```
 
+---
+
 ## Configuration
 
-Edit:
+Core configuration is stored in:
 
 ```text
 config.py
 ```
 
-Example configuration:
+Example:
 
 ```python
 THRESHOLD = 3
@@ -407,41 +648,53 @@ WHITELIST_NETWORKS = [
 ]
 ```
 
-### Response Modes
+---
 
-Safe testing:
+## Response Modes
+
+### Dry-Run
 
 ```python
 RESPONSE_MODE = "dry-run"
 ```
 
-Real firewall enforcement:
+SSHGuard performs detection but does not modify nftables.
+
+---
+
+### Real Response
 
 ```python
 RESPONSE_MODE = "real"
 ```
 
-Always verify network access and recovery paths before enabling real firewall enforcement.
+SSHGuard automatically applies temporary firewall blocks after brute-force detection.
+
+Always verify administrative and recovery access before enabling Real mode.
+
+---
 
 ## Detector Testing
 
-Run the detector tests from the project root:
+Run the Detection Engine test module from the project root:
 
 ```bash
 python3 -m tests.test_detector
 ```
 
-The synthetic detector tests verify behavior such as:
+Current synthetic tests validate behavior including:
 
-- Per-IP attempt tracking
-- Sliding time-window logic
+- Per-IP failed-attempt tracking
+- Sliding time-window behavior
 - Threshold detection
-- Multiple independent source IP addresses
-- Successful login events not increasing the failure counter
+- Independent tracking of multiple source IPs
+- Successful login events not increasing the failed-attempt counter
+
+---
 
 ## Inspecting SSHGuard Firewall State
 
-Display the SSHGuard nftables table:
+Display the complete SSHGuard nftables table:
 
 ```bash
 sudo nft list table inet sshguard
@@ -453,15 +706,23 @@ Display currently blocked IPv4 addresses:
 sudo nft list set inet sshguard blocked_ipv4
 ```
 
-Example active block:
+Example:
 
 ```text
-elements = {
-    192.168.0.11 expires 24s
+table inet sshguard {
+    set blocked_ipv4 {
+        type ipv4_addr
+        timeout 1m
+        elements = {
+            192.168.0.11 expires 24s
+        }
+    }
 }
 ```
 
-When the timeout expires, the source IP is automatically removed.
+After the timeout expires, the source address is automatically removed.
+
+---
 
 ## Removing the SSHGuard Firewall Table
 
@@ -471,27 +732,58 @@ If the SSHGuard firewall table needs to be removed manually:
 sudo nft delete table inet sshguard
 ```
 
-This removes only the firewall table created by SSHGuard.
+This removes only the nftables table created by SSHGuard.
 
 It does not flush the entire system firewall.
 
+---
+
 ## Security Considerations
 
-This project is intended for defensive cybersecurity purposes only.
+SSHGuard is intended strictly for defensive cybersecurity use.
 
-All testing must be performed on systems owned by the project team or systems for which explicit authorization has been provided.
+All testing must be performed only on systems owned by the project team or systems for which explicit authorization has been provided.
 
 The repository must never contain:
 
 - Real passwords
 - SSH private keys
 - API credentials
-- Tokens
-- Sensitive authentication data
+- Personal Access Tokens
+- Sensitive authentication information
 - Private environment files
 - Real captured credentials
 
-The project does not store SSH passwords.
+SSHGuard does not store SSH passwords.
+
+---
+
+## GitHub Repository Safety
+
+Sensitive files should not be committed to Git.
+
+The project's `.gitignore` currently excludes files such as:
+
+```text
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.env
+.env.*
+```
+
+Before every important push, developers should verify the staged files using:
+
+```bash
+git status
+```
+
+---
 
 ## Current Development Status
 
@@ -500,22 +792,26 @@ The project does not store SSH passwords.
 - Real-time OpenSSH journal monitoring
 - Failed-login parsing
 - Successful-login parsing
-- Invalid-user detection
-- Event normalization
+- Invalid-user identification
+- SSH event normalization
 - Per-source-IP tracking
 - Sliding time-window detection
-- Configurable threshold
+- Configurable brute-force threshold
 - Configurable block duration
 - Brute-force incident generation
 - Duplicate incident suppression
 - Synthetic Detection Engine testing
 - Real SSH end-to-end testing
 - Dry-Run response mode
-- Real nftables response mode
-- Temporary automatic firewall blocking
-- Automatic block expiration
+- Real nftables automated response
+- Temporary IP blocking
+- Automatic firewall block expiration
 - Protected Tailscale management path
 - Git repository initialization
+- GitHub repository integration
+- Real testing evidence
+
+---
 
 ### In Progress
 
@@ -523,15 +819,17 @@ The project does not store SSH passwords.
 - Persistent security-event storage
 - SQLite integration
 - Monitoring dashboard
-- systemd service deployment
+- Deployment as a systemd service
 - Additional documentation
 - Final demonstration environment
+
+---
 
 ### Planned Improvements
 
 Possible future improvements include:
 
-- Security event database
+- Persistent security-event database
 - Monitoring dashboard
 - Active block management
 - Incident history
@@ -540,28 +838,44 @@ Possible future improvements include:
 - Alert notifications
 - Extended reporting
 - Deployment as a persistent Linux service
+- Improved configuration management
+- Additional automated test cases
 
-## Educational Purpose
+---
+
+## Educational Goals
 
 SSHGuard is being developed as a cybersecurity graduation project.
 
-The purpose of the project is not only to produce a working security tool, but also to demonstrate understanding of:
+The project demonstrates practical understanding of:
 
 - Linux authentication logging
 - OpenSSH
-- Log parsing
-- Event normalization
+- systemd journal
 - Python
-- Stateful security detection
+- Regular Expressions
+- Event parsing
+- Event normalization
+- Stateful detection
+- Per-IP tracking
 - Sliding time windows
 - Brute-force detection
+- Incident generation
 - Automated defensive response
 - Linux firewall management
 - nftables
 - Testing and validation
+- Git
+- GitHub
+- Secure development practices
+
+---
 
 ## Disclaimer
 
 SSHGuard is an educational defensive-security project.
 
 Use it only on systems you own or are explicitly authorized to test.
+
+Unauthorized testing or attacks against third-party systems are not supported by this project.
+```
