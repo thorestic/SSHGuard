@@ -1,4 +1,3 @@
-```markdown
 # SSHGuard
 
 Real-Time SSH Brute-Force Detection & Automatic Blocking System
