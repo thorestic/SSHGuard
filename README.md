@@ -877,4 +877,3 @@ SSHGuard is an educational defensive-security project.
 Use it only on systems you own or are explicitly authorized to test.
 
 Unauthorized testing or attacks against third-party systems are not supported by this project.
-```
