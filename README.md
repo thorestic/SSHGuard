@@ -565,4 +565,3 @@ The purpose of the project is not only to produce a working security tool, but a
 SSHGuard is an educational defensive-security project.
 
 Use it only on systems you own or are explicitly authorized to test.
-```
