@@ -1,0 +1,22 @@
+[Unit]
+Description=SSHGuard Brute-Force Detection and Automatic Blocking System
+Documentation=https://github.com/thorestic/SSHGuard
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+User=root
+
+WorkingDirectory=/home/mc/sshguard
+
+ExecStart=/usr/bin/python3 /home/mc/sshguard/main.py
+
+Restart=on-failure
+RestartSec=3
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
