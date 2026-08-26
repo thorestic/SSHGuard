@@ -88,15 +88,21 @@ class FirewallManager:
 
         # Remove only our project's previous table.
         # This does NOT touch UFW/Docker/Tailscale.
-        self._run_nft(
+        existing_table = self._run_nft(
             [
-                "delete",
+                "list",
                 "table",
                 "inet",
                 self.TABLE_NAME,
             ],
             check=False,
         )
+
+        if existing_table.returncode == 0:
+            print(
+                "[FIREWALL] Existing SSHGuard nftables table preserved"
+            )
+            return
 
         ruleset = f"""
 table inet {self.TABLE_NAME} {{
