@@ -1,0 +1,27 @@
+[Unit]
+Description=SSHGuard Read-Only Dashboard API
+Documentation=https://github.com/thorestic/SSHGuard
+After=network-online.target sshguard-project.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mc
+Group=mc
+WorkingDirectory=/home/mc/sshguard
+Environment=SSHGUARD_DATABASE_PATH=/home/mc/sshguard/data/sshguard.db
+Environment=SSHGUARD_WEB_DIST_PATH=/home/mc/sshguard/dashboard/web/dist
+ExecStart=/home/mc/sshguard/.venv/bin/uvicorn dashboard.api.app:app --host 127.0.0.1 --port 8000 --workers 1
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/home/mc/sshguard
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
+
