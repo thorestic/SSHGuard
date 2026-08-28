@@ -89,6 +89,7 @@ def create_app(
     )
 
     assets_directory = selected_web_dist / "assets"
+    brand_directory = selected_web_dist / "brand"
     index_file = selected_web_dist / "index.html"
 
     if assets_directory.is_dir() and index_file.is_file():
@@ -97,6 +98,13 @@ def create_app(
             StaticFiles(directory=assets_directory),
             name="dashboard-assets",
         )
+
+        if brand_directory.is_dir():
+            application.mount(
+                "/brand",
+                StaticFiles(directory=brand_directory),
+                name="dashboard-brand",
+            )
 
         @application.get(
             "/{client_path:path}",

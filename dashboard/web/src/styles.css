@@ -136,8 +136,8 @@ select { padding: 9px 32px 9px 11px; color: #aebeb9; background: #091310; border
 .outcome-strip__items span { color: #72867f; font-size: 9px; }
 .backdrop { display: none; }
 
-.about-hero { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(320px, .6fr); margin-bottom: 28px; }
-.about-hero__image { width: 100%; height: 100%; min-height: 340px; object-fit: cover; border-right: 1px solid var(--border); }
+.about-hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); margin-bottom: 28px; overflow: hidden; }
+.about-hero__image { width: 100%; height: 100%; min-height: 300px; max-height: 390px; object-fit: cover; border-right: 1px solid var(--border); }
 .about-hero__copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(28px, 4vw, 52px); }
 .about-hero__copy h2 { margin: 10px 0 14px; font-size: clamp(24px, 3vw, 36px); line-height: 1.12; letter-spacing: -.04em; }
 .about-hero__copy p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.75; }

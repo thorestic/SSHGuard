@@ -174,6 +174,13 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("SSHGuard Security Console", response.text)
 
+    def test_dashboard_brand_image_is_served_as_static_file(self):
+        response = self.client.get("/brand/sshguard-mark.png")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/png")
+        self.assertTrue(response.content.startswith(b"\x89PNG\r\n\x1a\n"))
+
     def test_unknown_api_path_does_not_return_dashboard_html(self):
         response = self.client.get("/api/v1/not-a-route")
 
