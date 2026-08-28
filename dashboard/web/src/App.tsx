@@ -19,6 +19,9 @@ const FirewallPage = lazy(() =>
 const AnalyticsPage = lazy(() =>
   import("./pages/AnalyticsPage").then((module) => ({ default: module.AnalyticsPage })),
 );
+const AboutPage = lazy(() =>
+  import("./pages/AboutPage").then((module) => ({ default: module.AboutPage })),
+);
 
 export default function App() {
   return (
@@ -31,6 +34,7 @@ export default function App() {
             <Route element={<AuthenticationPage />} path="authentication" />
             <Route element={<FirewallPage />} path="firewall" />
             <Route element={<AnalyticsPage />} path="analytics" />
+            <Route element={<AboutPage />} path="about" />
           </Route>
         </Routes>
       </Suspense>

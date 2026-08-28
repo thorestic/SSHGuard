@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Fingerprint,
+  Info,
   LayoutDashboard,
   Menu,
   Server,
@@ -18,6 +19,7 @@ const navigation = [
   { to: "/authentication", label: "Authentication", icon: Fingerprint },
   { to: "/firewall", label: "Firewall Actions", icon: Shield },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/about", label: "About", icon: Info },
 ];
 
 export function AppShell() {
@@ -36,7 +38,9 @@ export function AppShell() {
 
       <aside className={`sidebar ${open ? "sidebar--open" : ""}`}>
         <div className="brand">
-          <span className="brand__mark"><Shield size={22} /></span>
+          <span className="brand__mark">
+            <img alt="" src="/brand/sshguard-mark.png" />
+          </span>
           <div>
             <strong>SSHGuard</strong>
             <span>Security Console</span>
