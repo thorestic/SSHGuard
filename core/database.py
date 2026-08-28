@@ -1,23 +1,54 @@
 import os
 import sqlite3
+from contextlib import contextmanager
 
 
 class DatabaseManager:
-    def __init__(self, database_path="data/sshguard.db"):
+    def __init__(
+        self,
+        database_path="data/sshguard.db",
+    ):
         self.database_path = database_path
 
-        database_directory = os.path.dirname(database_path)
+        database_directory = os.path.dirname(
+            database_path
+        )
 
         if database_directory:
-            os.makedirs(database_directory, exist_ok=True)
+            os.makedirs(
+                database_directory,
+                exist_ok=True,
+            )
 
         self._create_tables()
 
-    def _connect(self):
-        return sqlite3.connect(self.database_path)
+    @contextmanager
+    def _connection(self):
+        """
+        Open a SQLite connection and guarantee that
+        it is committed/rolled back and then closed.
+
+        This prevents connection leaks during
+        long-running SSHGuard operation.
+        """
+
+        connection = sqlite3.connect(
+            self.database_path
+        )
+
+        try:
+            yield connection
+            connection.commit()
+
+        except Exception:
+            connection.rollback()
+            raise
+
+        finally:
+            connection.close()
 
     def _create_tables(self):
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS auth_events (
@@ -42,7 +73,8 @@ class DatabaseManager:
                     first_seen TEXT NOT NULL,
                     last_seen TEXT NOT NULL,
                     window_seconds INTEGER NOT NULL,
-                    status TEXT NOT NULL DEFAULT 'detected'
+                    status TEXT NOT NULL DEFAULT 'detected',
+                    response_outcome TEXT
                 )
                 """
             )
@@ -54,39 +86,72 @@ class DatabaseManager:
                     source_ip TEXT NOT NULL,
                     action TEXT NOT NULL,
                     timestamp TEXT NOT NULL,
-                    expires_at TEXT
+                    expires_at TEXT,
+                    incident_id INTEGER,
+                    related_action_id INTEGER
                 )
                 """
             )
 
-            # Simple database migration:
-            # Add new columns if this database was created
-            # before these fields existed.
-            columns = {
-                row[1]
-                for row in connection.execute(
-                    "PRAGMA table_info(firewall_actions)"
-                ).fetchall()
-            }
+            self._migrate_incidents_table(
+                connection
+            )
 
-            if "incident_id" not in columns:
-                connection.execute(
-                    """
-                    ALTER TABLE firewall_actions
-                    ADD COLUMN incident_id INTEGER
-                    """
-                )
+            self._migrate_firewall_actions_table(
+                connection
+            )
 
-            if "related_action_id" not in columns:
-                connection.execute(
-                    """
-                    ALTER TABLE firewall_actions
-                    ADD COLUMN related_action_id INTEGER
-                    """
-                )
+    def _migrate_incidents_table(
+        self,
+        connection,
+    ):
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(incidents)"
+            ).fetchall()
+        }
 
-    def save_auth_event(self, event: dict):
-        with self._connect() as connection:
+        if "response_outcome" not in columns:
+            connection.execute(
+                """
+                ALTER TABLE incidents
+                ADD COLUMN response_outcome TEXT
+                """
+            )
+
+    def _migrate_firewall_actions_table(
+        self,
+        connection,
+    ):
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(firewall_actions)"
+            ).fetchall()
+        }
+
+        if "incident_id" not in columns:
+            connection.execute(
+                """
+                ALTER TABLE firewall_actions
+                ADD COLUMN incident_id INTEGER
+                """
+            )
+
+        if "related_action_id" not in columns:
+            connection.execute(
+                """
+                ALTER TABLE firewall_actions
+                ADD COLUMN related_action_id INTEGER
+                """
+            )
+
+    def save_auth_event(
+        self,
+        event: dict,
+    ):
+        with self._connection() as connection:
             connection.execute(
                 """
                 INSERT INTO auth_events (
@@ -104,13 +169,21 @@ class DatabaseManager:
                     event.get("username"),
                     event["source_ip"],
                     event.get("source_port"),
-                    int(event.get("invalid_user", False)),
+                    int(
+                        event.get(
+                            "invalid_user",
+                            False,
+                        )
+                    ),
                     event["timestamp"],
                 ),
             )
 
-    def save_incident(self, incident: dict):
-        with self._connect() as connection:
+    def save_incident(
+        self,
+        incident: dict,
+    ):
+        with self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO incidents (
@@ -120,9 +193,10 @@ class DatabaseManager:
                     first_seen,
                     last_seen,
                     window_seconds,
-                    status
+                    status,
+                    response_outcome
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident["source_ip"],
@@ -132,6 +206,7 @@ class DatabaseManager:
                     incident["last_seen"],
                     incident["window_seconds"],
                     "detected",
+                    None,
                 ),
             )
 
@@ -146,7 +221,7 @@ class DatabaseManager:
         incident_id: int | None = None,
         related_action_id: int | None = None,
     ):
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO firewall_actions (
@@ -171,8 +246,11 @@ class DatabaseManager:
 
             return cursor.lastrowid
 
-    def get_expired_unlogged_blocks(self, current_time: str):
-        with self._connect() as connection:
+    def get_expired_unlogged_blocks(
+        self,
+        current_time: str,
+    ):
+        with self._connection() as connection:
             return connection.execute(
                 """
                 SELECT
@@ -202,7 +280,7 @@ class DatabaseManager:
         incident_id: int,
         status: str,
     ):
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """
                 UPDATE incidents
@@ -211,6 +289,28 @@ class DatabaseManager:
                 """,
                 (
                     status,
+                    incident_id,
+                ),
+            )
+
+    def update_incident_response(
+        self,
+        incident_id: int,
+        status: str,
+        response_outcome: str,
+    ):
+        with self._connection() as connection:
+            connection.execute(
+                """
+                UPDATE incidents
+                SET
+                    status = ?,
+                    response_outcome = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    response_outcome,
                     incident_id,
                 ),
             )

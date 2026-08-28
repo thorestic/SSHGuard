@@ -1,5 +1,9 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 
 from config import (
     THRESHOLD,
@@ -12,9 +16,14 @@ from config import (
 
 from core.log_parser import stream_ssh_events
 from core.detector import BruteForceDetector
-from core.firewall import FirewallManager
+from core.firewall import (
+    FirewallManager,
+    FirewallResult,
+)
 from core.database import DatabaseManager
-from core.block_monitor import BlockLifecycleMonitor
+from core.block_monitor import (
+    BlockLifecycleMonitor,
+)
 from core.logging_config import setup_logging
 
 
@@ -28,11 +37,15 @@ def display_event(event):
             f"IP={event['source_ip']} "
             f"USER={event['username']} "
             f"PORT={event['source_port']} "
-            f"INVALID_USER={event['invalid_user']} "
+            f"INVALID_USER="
+            f"{event['invalid_user']} "
             f"TIME={event['timestamp']}"
         )
 
-    elif event["event_type"] == "successful_login":
+    elif (
+        event["event_type"]
+        == "successful_login"
+    ):
         print(
             "[SUCCESSFUL LOGIN] "
             f"IP={event['source_ip']} "
@@ -43,66 +56,113 @@ def display_event(event):
 
 
 def display_incident(incident):
-    print("\n======================================")
-    print("[!!!] BRUTE FORCE DETECTED")
-    print("--------------------------------------")
-    print(f"Source IP:   {incident['source_ip']}")
-    print(f"Username:    {incident['username']}")
-    print(f"Attempts:    {incident['attempt_count']}")
-    print(f"First Seen:  {incident['first_seen']}")
-    print(f"Last Seen:   {incident['last_seen']}")
+    print(
+        "\n"
+        "======================================"
+    )
+    print(
+        "[!!!] BRUTE FORCE DETECTED"
+    )
+    print(
+        "--------------------------------------"
+    )
+    print(
+        f"Source IP:   "
+        f"{incident['source_ip']}"
+    )
+    print(
+        f"Username:    "
+        f"{incident['username']}"
+    )
+    print(
+        f"Attempts:    "
+        f"{incident['attempt_count']}"
+    )
+    print(
+        f"First Seen:  "
+        f"{incident['first_seen']}"
+    )
+    print(
+        f"Last Seen:   "
+        f"{incident['last_seen']}"
+    )
     print(
         f"Time Window: "
-        f"{incident['window_seconds']} seconds"
+        f"{incident['window_seconds']} "
+        "seconds"
     )
-    print("======================================")
+    print(
+        "======================================"
+    )
 
 
 def main():
-    # Configure console + file logging before
-    # initializing the rest of the application.
     setup_logging()
 
     logger.info(
         "SSHGuard application starting"
     )
 
-    # Detection engine.
     detector = BruteForceDetector(
         threshold=THRESHOLD,
         window_seconds=WINDOW_SECONDS,
     )
 
-    # Persistent structured storage.
     database = DatabaseManager()
 
-    # Automated firewall response.
     firewall = FirewallManager(
         protected_port=PROTECTED_SSH_PORT,
-        block_duration_seconds=BLOCK_DURATION_SECONDS,
-        whitelist_networks=WHITELIST_NETWORKS,
+        block_duration_seconds=(
+            BLOCK_DURATION_SECONDS
+        ),
+        whitelist_networks=(
+            WHITELIST_NETWORKS
+        ),
         response_mode=RESPONSE_MODE,
     )
 
-    print("======================================")
+    print(
+        "======================================"
+    )
     print(" SSHGuard")
     print(" Brute-Force Detection")
-    print(" & Automatic Blocking System")
-    print("======================================")
-    print(f"Threshold:       {THRESHOLD}")
-    print(f"Time Window:     {WINDOW_SECONDS}s")
-    print(f"Block Duration:  {BLOCK_DURATION_SECONDS}s")
-    print(f"SSH Port:        {PROTECTED_SSH_PORT}")
-    print(f"Response Mode:   {RESPONSE_MODE.upper()}")
-    print("======================================\n")
+    print(
+        " & Automatic Blocking System"
+    )
+    print(
+        "======================================"
+    )
+    print(
+        f"Threshold:       {THRESHOLD}"
+    )
+    print(
+        f"Time Window:     "
+        f"{WINDOW_SECONDS}s"
+    )
+    print(
+        f"Block Duration:  "
+        f"{BLOCK_DURATION_SECONDS}s"
+    )
+    print(
+        f"SSH Port:        "
+        f"{PROTECTED_SSH_PORT}"
+    )
+    print(
+        f"Response Mode:   "
+        f"{RESPONSE_MODE.upper()}"
+    )
+    print(
+        "======================================"
+        "\n"
+    )
 
-    # Initialize/preserve SSHGuard's nftables state.
     try:
         firewall.setup()
 
     except Exception as error:
         logger.exception(
-            "Firewall initialization failed: %s",
+            "Firewall initialization "
+            "failed: %s",
             error,
         )
 
@@ -114,8 +174,6 @@ def main():
         RESPONSE_MODE.upper(),
     )
 
-    # Start lifecycle monitoring only after
-    # firewall initialization succeeds.
     block_monitor = BlockLifecycleMonitor(
         database=database,
     )
@@ -126,62 +184,82 @@ def main():
         "Block lifecycle monitor started"
     )
 
-    print("\n[+] SSH event monitoring started")
-    print("[+] Waiting for authentication events...\n")
+    print(
+        "\n[+] SSH event monitoring started"
+    )
+    print(
+        "[+] Waiting for authentication "
+        "events...\n"
+    )
 
     logger.info(
-        "SSH authentication event monitoring started"
+        "SSH authentication event "
+        "monitoring started"
     )
 
     try:
         for event in stream_ssh_events():
-            # Display normalized authentication event.
             display_event(event)
 
-            # Persist every relevant SSH authentication event.
-            database.save_auth_event(event)
+            database.save_auth_event(
+                event
+            )
 
-            # Pass event into detection engine.
-            incident = detector.process_event(event)
+            incident = (
+                detector.process_event(
+                    event
+                )
+            )
 
             if incident is None:
                 continue
 
-            # A real security incident has been detected.
-            display_incident(incident)
-
-            # Save the incident even if the firewall
-            # response later fails.
-            incident_id = database.save_incident(
+            display_incident(
                 incident
             )
 
+            # Detection is real regardless of whether
+            # the response later succeeds, fails,
+            # or is intentionally skipped.
+            incident_id = (
+                database.save_incident(
+                    incident
+                )
+            )
+
             logger.warning(
-                "Brute-force incident #%s detected "
-                "from IP %s against user %s "
-                "after %s failed attempts",
+                "Brute-force incident #%s "
+                "detected from IP %s "
+                "against user %s after %s "
+                "failed attempts",
                 incident_id,
                 incident["source_ip"],
                 incident["username"],
                 incident["attempt_count"],
             )
 
-            # Attempt automated firewall response.
             try:
-                block_applied = firewall.block_ip(
-                    incident["source_ip"]
+                response_result = (
+                    firewall.block_ip(
+                        incident[
+                            "source_ip"
+                        ]
+                    )
                 )
 
             except Exception as error:
-                # Detection succeeded, but response failed.
-                database.update_incident_status(
-                    incident_id,
-                    "response_failed",
+                database.update_incident_response(
+                    incident_id=incident_id,
+                    status="response_failed",
+                    response_outcome=(
+                        "firewall_error"
+                    ),
                 )
 
                 logger.exception(
                     "Firewall response failed "
-                    "for incident #%s from IP %s: %s",
+                    "for incident #%s "
+                    "from IP %s: %s",
                     incident_id,
                     incident["source_ip"],
                     error,
@@ -189,39 +267,58 @@ def main():
 
                 continue
 
-            # A firewall action is stored only when
-            # a real block was actually applied.
             if (
-                block_applied
-                and RESPONSE_MODE == "real"
+                response_result
+                == FirewallResult.BLOCKED
             ):
                 blocked_at = datetime.now(
                     timezone.utc
                 )
 
-                expires_at = blocked_at + timedelta(
-                    seconds=BLOCK_DURATION_SECONDS
+                expires_at = (
+                    blocked_at
+                    + timedelta(
+                        seconds=(
+                            BLOCK_DURATION_SECONDS
+                        )
+                    )
                 )
 
                 block_action_id = (
                     database.save_firewall_action(
-                        source_ip=incident["source_ip"],
+                        source_ip=(
+                            incident[
+                                "source_ip"
+                            ]
+                        ),
                         action="block",
-                        timestamp=blocked_at.isoformat(),
-                        expires_at=expires_at.isoformat(),
-                        incident_id=incident_id,
+                        timestamp=(
+                            blocked_at
+                            .isoformat()
+                        ),
+                        expires_at=(
+                            expires_at
+                            .isoformat()
+                        ),
+                        incident_id=(
+                            incident_id
+                        ),
                     )
                 )
 
-                database.update_incident_status(
-                    incident_id,
-                    "blocked",
+                database.update_incident_response(
+                    incident_id=incident_id,
+                    status="blocked",
+                    response_outcome=(
+                        response_result.value
+                    ),
                 )
 
                 logger.warning(
-                    "Firewall block action #%s applied "
-                    "to IP %s for incident #%s; "
-                    "scheduled expiration at %s",
+                    "Firewall block action #%s "
+                    "applied to IP %s for "
+                    "incident #%s; scheduled "
+                    "expiration at %s",
                     block_action_id,
                     incident["source_ip"],
                     incident_id,
@@ -230,41 +327,66 @@ def main():
 
                 print(
                     "[DATABASE] "
-                    f"Block action #{block_action_id} "
-                    f"linked to incident #{incident_id}"
+                    f"Block action "
+                    f"#{block_action_id} "
+                    f"linked to incident "
+                    f"#{incident_id}"
                 )
 
-            elif RESPONSE_MODE == "dry-run":
+            elif (
+                response_result
+                == FirewallResult.DRY_RUN
+            ):
+                database.update_incident_response(
+                    incident_id=incident_id,
+                    status="response_skipped",
+                    response_outcome=(
+                        response_result.value
+                    ),
+                )
+
                 logger.info(
-                    "Dry-run firewall response simulated "
-                    "for incident #%s from IP %s",
+                    "Firewall response for "
+                    "incident #%s from IP %s "
+                    "was simulated in dry-run "
+                    "mode",
                     incident_id,
                     incident["source_ip"],
                 )
 
             else:
-                # block_ip() returned False.
-                # This can happen for cases such as
-                # whitelisted or already-blocked IPs.
+                database.update_incident_response(
+                    incident_id=incident_id,
+                    status="response_skipped",
+                    response_outcome=(
+                        response_result.value
+                    ),
+                )
+
                 logger.warning(
-                    "No new firewall block was applied "
-                    "for incident #%s from IP %s",
+                    "Firewall response skipped "
+                    "for incident #%s from IP %s; "
+                    "outcome=%s",
                     incident_id,
                     incident["source_ip"],
+                    response_result.value,
                 )
 
     except KeyboardInterrupt:
         logger.info(
-            "SSHGuard stopped by administrator"
+            "SSHGuard stopped by "
+            "administrator"
         )
 
         print(
-            "\n[+] SSHGuard stopped by administrator"
+            "\n[+] SSHGuard stopped by "
+            "administrator"
         )
 
     except Exception as error:
         logger.exception(
-            "Unhandled error in SSH event loop: %s",
+            "Unhandled error in SSH event "
+            "loop: %s",
             error,
         )
 
