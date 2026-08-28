@@ -168,6 +168,18 @@ class DashboardApiTests(unittest.TestCase):
                 msg=f"{path} must remain read-only",
             )
 
+    def test_live_stream_is_documented_as_server_sent_events(self):
+        response = self.client.get("/api/openapi.json")
+
+        stream_response = response.json()["paths"][
+            "/api/v1/events/stream"
+        ]["get"]["responses"]["200"]
+
+        self.assertIn(
+            "text/event-stream",
+            stream_response["content"],
+        )
+
     def test_built_dashboard_is_served_by_fastapi(self):
         response = self.client.get("/")
 

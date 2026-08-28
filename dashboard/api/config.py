@@ -10,6 +10,8 @@ class DashboardSettings:
     database_path: Path
     web_dist_path: Path
     cors_origins: tuple[str, ...]
+    live_poll_seconds: float
+    live_heartbeat_seconds: float
 
     @classmethod
     def from_environment(cls) -> "DashboardSettings":
@@ -36,4 +38,29 @@ class DashboardSettings:
                 for origin in origins.split(",")
                 if origin.strip()
             ),
+            live_poll_seconds=cls._positive_float(
+                "SSHGUARD_LIVE_POLL_SECONDS",
+                1.0,
+            ),
+            live_heartbeat_seconds=cls._positive_float(
+                "SSHGUARD_LIVE_HEARTBEAT_SECONDS",
+                15.0,
+            ),
         )
+
+    @staticmethod
+    def _positive_float(name: str, default: float) -> float:
+        raw_value = os.getenv(name)
+
+        if raw_value is None:
+            return default
+
+        try:
+            value = float(raw_value)
+        except ValueError as error:
+            raise ValueError(f"{name} must be a number") from error
+
+        if value <= 0:
+            raise ValueError(f"{name} must be greater than zero")
+
+        return value

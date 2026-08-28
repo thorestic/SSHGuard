@@ -4,9 +4,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import DashboardSettings
+from .live import security_event_stream
 from .repository import DatabaseUnavailable, SecurityReadRepository
 from .routers import analytics, authentication, firewall, incidents, overview
 from .schemas import HealthResponse
@@ -66,6 +68,39 @@ def create_app(
     )
     def health() -> dict[str, str]:
         return application.state.repository.health()
+
+    @application.get(
+        "/api/v1/events/stream",
+        tags=["System"],
+        summary="Stream security-data change notifications",
+        responses={
+            200: {
+                "description": "Server-Sent Events notification stream",
+                "content": {"text/event-stream": {}},
+            },
+            503: {
+                "description": "SSHGuard database unavailable",
+            },
+        },
+    )
+    async def live_events(request: Request) -> StreamingResponse:
+        repository: SecurityReadRepository = application.state.repository
+        repository.health()
+
+        return StreamingResponse(
+            security_event_stream(
+                request,
+                repository,
+                poll_seconds=settings.live_poll_seconds,
+                heartbeat_seconds=settings.live_heartbeat_seconds,
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     application.include_router(
         overview.router,

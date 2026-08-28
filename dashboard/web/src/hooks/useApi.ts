@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getJson } from "../api/client";
+import { useLiveUpdates } from "./useLiveUpdates";
 
 interface ApiState<T> {
   data: T | null;
@@ -10,6 +11,7 @@ interface ApiState<T> {
 }
 
 export function useApi<T>(path: string): ApiState<T> {
+  const { revision: liveRevision } = useLiveUpdates();
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +47,7 @@ export function useApi<T>(path: string): ApiState<T> {
       });
 
     return () => controller.abort();
-  }, [path, revision]);
+  }, [liveRevision, path, revision]);
 
   return { data, error, loading, refresh };
 }

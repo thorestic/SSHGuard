@@ -9,6 +9,27 @@ class DatabaseUnavailable(RuntimeError):
     """Raised when the dashboard cannot read the SSHGuard database."""
 
 
+class DatabaseChangeMonitor:
+    """Track commits made by other SQLite connections without reading rows."""
+
+    def __init__(self, connection: sqlite3.Connection):
+        self._connection = connection
+        self._data_version = self._read_data_version()
+
+    def _read_data_version(self) -> int:
+        return int(
+            self._connection.execute(
+                "PRAGMA data_version"
+            ).fetchone()[0]
+        )
+
+    def poll(self) -> bool:
+        current_version = self._read_data_version()
+        changed = current_version != self._data_version
+        self._data_version = current_version
+        return changed
+
+
 class SecurityReadRepository:
     """Read-only query boundary over SSHGuard's SQLite event store."""
 
@@ -82,6 +103,13 @@ class SecurityReadRepository:
             "database": "available",
             "api_version": "v1",
         }
+
+    @contextmanager
+    def change_monitor(self) -> Iterator[DatabaseChangeMonitor]:
+        """Keep one read-only connection open for SQLite change signals."""
+
+        with self._connection() as connection:
+            yield DatabaseChangeMonitor(connection)
 
     def list_incidents(
         self,

@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "./components/AppShell";
 import { LoadingState } from "./components/States";
+import { LiveUpdatesProvider } from "./hooks/useLiveUpdates";
 
 const OverviewPage = lazy(() =>
   import("./pages/OverviewPage").then((module) => ({ default: module.OverviewPage })),
@@ -25,19 +26,21 @@ const AboutPage = lazy(() =>
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Suspense fallback={<LoadingState label="Loading console module" />}>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route element={<OverviewPage />} index />
-            <Route element={<IncidentsPage />} path="incidents" />
-            <Route element={<AuthenticationPage />} path="authentication" />
-            <Route element={<FirewallPage />} path="firewall" />
-            <Route element={<AnalyticsPage />} path="analytics" />
-            <Route element={<AboutPage />} path="about" />
-          </Route>
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+    <LiveUpdatesProvider>
+      <BrowserRouter>
+        <Suspense fallback={<LoadingState label="Loading console module" />}>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route element={<OverviewPage />} index />
+              <Route element={<IncidentsPage />} path="incidents" />
+              <Route element={<AuthenticationPage />} path="authentication" />
+              <Route element={<FirewallPage />} path="firewall" />
+              <Route element={<AnalyticsPage />} path="analytics" />
+              <Route element={<AboutPage />} path="about" />
+            </Route>
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </LiveUpdatesProvider>
   );
 }

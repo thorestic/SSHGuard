@@ -1,5 +1,9 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "/api/v1";
 
+export function apiUrl(path: string): string {
+  return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -14,7 +18,7 @@ export async function getJson<T>(
   path: string,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(apiUrl(path), {
     method: "GET",
     headers: { Accept: "application/json" },
     signal,

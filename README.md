@@ -37,6 +37,11 @@ The project is currently deployed and tested on a Raspberry Pi 4 running Debian 
 - Temporary nftables IP blocking
 - Automatic firewall block expiration
 - Tailscale management-path protection
+- Persistent SQLite security-event storage
+- Versioned read-only FastAPI
+- React and TypeScript monitoring dashboard
+- Live dashboard updates through Server-Sent Events
+- Automatic live-stream reconnection and offline status
 - Synthetic detector testing
 - Real end-to-end SSH testing
 
@@ -70,6 +75,40 @@ Firewall Manager
     |
     v
 nftables Temporary Block
+```
+
+The monitoring path is deliberately separated from the response path:
+
+```text
+SSHGuard Core
+    |
+    v
+SQLite Event Store
+    |
+    +--> FastAPI REST snapshots --> React Dashboard
+    |
+    +--> SSE change signal ------> Live refresh
+```
+
+The live stream sends a small change notification rather than duplicating
+security records inside the stream. A client that receives the notification
+fetches a fresh typed snapshot from the versioned REST API. This keeps the
+same contract reusable by the web dashboard and a future Windows client.
+
+The dashboard API remains read-only and does not execute nftables commands.
+
+Live-update timing can be configured with:
+
+```text
+SSHGUARD_LIVE_POLL_SECONDS=1.0
+SSHGUARD_LIVE_HEARTBEAT_SECONDS=15.0
+```
+
+The stream endpoint is:
+
+```text
+GET /api/v1/events/stream
+Content-Type: text/event-stream
 ```
 
 ---
@@ -809,16 +848,20 @@ git status
 - Git repository initialization
 - GitHub repository integration
 - Real testing evidence
+- Read-only FastAPI dashboard API
+- React and TypeScript dashboard MVP
+- Overview, Incidents, Authentication, Firewall Actions, and Analytics pages
+- Live SSE change notifications
+- Automatic dashboard refresh and stream reconnection
+- Project branding and About page
 
 ---
 
 ### In Progress
 
-- Expanded automated testing
-- Persistent security-event storage
-- SQLite integration
-- Monitoring dashboard
-- Deployment as a systemd service
+- Controlled analyst-response workflow
+- Authentication and role-based access control
+- Audited manual unblock design
 - Additional documentation
 - Final demonstration environment
 
@@ -828,10 +871,10 @@ git status
 
 Possible future improvements include:
 
-- Persistent security-event database
-- Monitoring dashboard
-- Active block management
-- Incident history
+- Authenticated active-block management
+- Audited manual unblock requests
+- SOC analyst incident triage
+- Human-guided incident summaries
 - Additional SSH event analysis
 - Multiple protected services
 - Alert notifications

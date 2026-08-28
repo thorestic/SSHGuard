@@ -13,6 +13,11 @@ import {
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
+import {
+  type LiveConnectionStatus,
+  useLiveUpdates,
+} from "../hooks/useLiveUpdates";
+
 const navigation = [
   { to: "/", label: "Overview", icon: LayoutDashboard },
   { to: "/incidents", label: "Incidents", icon: ShieldAlert },
@@ -22,8 +27,32 @@ const navigation = [
   { to: "/about", label: "About", icon: Info },
 ];
 
+const connectionCopy: Record<
+  LiveConnectionStatus,
+  { detail: string; label: string }
+> = {
+  connecting: {
+    detail: "Opening event stream",
+    label: "Connecting telemetry",
+  },
+  live: {
+    detail: "Updates automatically",
+    label: "Live telemetry",
+  },
+  reconnecting: {
+    detail: "Showing last snapshot",
+    label: "Reconnecting telemetry",
+  },
+  offline: {
+    detail: "Manual refresh available",
+    label: "Telemetry offline",
+  },
+};
+
 export function AppShell() {
   const [open, setOpen] = useState(false);
+  const { lastEventAt, status } = useLiveUpdates();
+  const connection = connectionCopy[status];
 
   return (
     <div className="app-shell">
@@ -73,8 +102,8 @@ export function AppShell() {
 
         <div className="sidebar__system">
           <div className="system-row">
-            <span className="live-dot" />
-            <div><strong>Monitoring active</strong><span>Read-only console</span></div>
+            <span className={`live-dot live-dot--${status}`} />
+            <div><strong>{connection.label}</strong><span>{connection.detail}</span></div>
           </div>
           <div className="system-row">
             <Server size={16} />
@@ -87,7 +116,14 @@ export function AppShell() {
 
       <main className="main-content">
         <div className="topbar">
-          <div className="topbar__status"><Activity size={15} /><span>Security telemetry</span></div>
+          <div
+            aria-live="polite"
+            className={`topbar__status topbar__status--${status}`}
+            title={lastEventAt ? `Last stream event: ${lastEventAt}` : undefined}
+          >
+            <Activity size={15} />
+            <span>{connection.label}</span>
+          </div>
           <span>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date())}</span>
         </div>
         <div className="page-content"><Outlet /></div>
