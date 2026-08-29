@@ -12,8 +12,8 @@ FAILED_PASSWORD_PATTERN = re.compile(
     r"port (?P<source_port>\d+)"
 )
 
-ACCEPTED_PASSWORD_PATTERN = re.compile(
-    r"Accepted password for "
+ACCEPTED_LOGIN_PATTERN = re.compile(
+    r"Accepted (?P<authentication_method>\S+) for "
     r"(?P<username>\S+) "
     r"from (?P<source_ip>[0-9a-fA-F:.]+) "
     r"port (?P<source_port>\d+)"
@@ -41,7 +41,7 @@ def parse_ssh_message(message: str):
             ),
         }
 
-    accepted_match = ACCEPTED_PASSWORD_PATTERN.search(
+    accepted_match = ACCEPTED_LOGIN_PATTERN.search(
         message
     )
 

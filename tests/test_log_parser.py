@@ -110,6 +110,41 @@ class SSHLogParserTests(unittest.TestCase):
             event["invalid_user"]
         )
 
+    def test_parses_successful_public_key_login(self):
+        message = (
+            "Accepted publickey for mc "
+            "from 192.168.0.11 "
+            "port 54315 ssh2: ED25519 SHA256:example"
+        )
+
+        event = parse_ssh_message(message)
+
+        self.assertIsNotNone(event)
+
+        self.assertEqual(
+            event["event_type"],
+            "successful_login",
+        )
+
+        self.assertEqual(
+            event["username"],
+            "mc",
+        )
+
+        self.assertEqual(
+            event["source_ip"],
+            "192.168.0.11",
+        )
+
+        self.assertEqual(
+            event["source_port"],
+            54315,
+        )
+
+        self.assertFalse(
+            event["invalid_user"]
+        )
+
     def test_ignores_pam_authentication_failure(self):
         """
         PAM can log authentication failure for the same
