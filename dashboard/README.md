@@ -72,17 +72,17 @@ cd ../..
 When `dashboard/web/dist` exists, FastAPI serves the React application and the
 API from the same origin at `http://127.0.0.1:8000`.
 
-Install the independent dashboard service only after verifying the paths and
-the `User`/`Group` fields for the target machine:
+Production must not run from the development checkout. Build the frontend as
+the unprivileged developer, then use the repository's production installer to
+create a root-owned release under `/opt/sshguard`, migrate persistent state to
+`/var/lib/sshguard`, and install both service units:
 
 ```bash
-sudo cp deploy/sshguard-dashboard-api.service \
-  /etc/systemd/system/sshguard-dashboard-api.service
-sudo systemd-analyze verify \
-  /etc/systemd/system/sshguard-dashboard-api.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now sshguard-dashboard-api
+sudo bash deploy/install-production.sh /home/mc/sshguard
 ```
+
+See `deploy/README.md` for the filesystem boundary, backup behavior, and
+verification procedure.
 
 Verify it locally:
 

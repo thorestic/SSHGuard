@@ -6,17 +6,28 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-
 User=root
-
-WorkingDirectory=/home/mc/sshguard
-
-ExecStart=/usr/bin/python3 /home/mc/sshguard/main.py
+Group=mc
+WorkingDirectory=/opt/sshguard/current
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=SSHGUARD_DATABASE_PATH=/var/lib/sshguard/sshguard.db
+Environment=SSHGUARD_LOG_PATH=/var/log/sshguard/sshguard.log
+ExecStart=/opt/sshguard/current/.venv/bin/python /opt/sshguard/current/main.py
 
 Restart=on-failure
 RestartSec=3
-
-Environment=PYTHONUNBUFFERED=1
+UMask=0027
+StateDirectory=sshguard
+StateDirectoryMode=0750
+LogsDirectory=sshguard
+LogsDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/opt/sshguard
+ReadWritePaths=/var/lib/sshguard /var/log/sshguard
 
 [Install]
 WantedBy=multi-user.target

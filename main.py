@@ -25,6 +25,7 @@ from core.block_monitor import (
     BlockLifecycleMonitor,
 )
 from core.logging_config import setup_logging
+from core.runtime_config import RuntimeSettings
 
 
 logger = logging.getLogger(__name__)
@@ -97,7 +98,11 @@ def display_incident(incident):
 
 
 def main():
-    setup_logging()
+    settings = RuntimeSettings.from_environment()
+
+    setup_logging(
+        log_path=str(settings.log_path)
+    )
 
     logger.info(
         "SSHGuard application starting"
@@ -108,7 +113,11 @@ def main():
         window_seconds=WINDOW_SECONDS,
     )
 
-    database = DatabaseManager()
+    database = DatabaseManager(
+        database_path=str(
+            settings.database_path
+        )
+    )
 
     firewall = FirewallManager(
         protected_port=PROTECTED_SSH_PORT,
