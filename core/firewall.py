@@ -2,6 +2,8 @@ import ipaddress
 import subprocess
 from enum import Enum
 
+from core.ip_address import parse_source_address
+
 
 class FirewallResult(str, Enum):
     BLOCKED = "blocked"
@@ -14,7 +16,10 @@ class FirewallResult(str, Enum):
 
 class FirewallManager:
     TABLE_NAME = "sshguard"
-    BLOCK_SET = "blocked_ipv4"
+    IPV4_BLOCK_SET = "blocked_ipv4"
+    IPV6_BLOCK_SET = "blocked_ipv6"
+    BLOCK_SET = IPV4_BLOCK_SET
+    IPV6_RULE_COMMENT = "sshguard-ipv6-block"
 
     def __init__(
         self,
@@ -87,7 +92,7 @@ class FirewallManager:
         """
 
         try:
-            address = ipaddress.ip_address(
+            address = parse_source_address(
                 source_ip
             )
 
@@ -98,6 +103,71 @@ class FirewallManager:
             address in network
             for network in self.whitelist_networks
         )
+
+    def _block_set_for_address(self, address):
+        if isinstance(
+            address,
+            ipaddress.IPv4Address,
+        ):
+            return self.IPV4_BLOCK_SET
+
+        return self.IPV6_BLOCK_SET
+
+    def _ensure_ipv6_support(self):
+        """
+        Upgrade an existing IPv4-only table in place.
+
+        The active IPv4 set is never flushed, so current
+        block timeouts survive application upgrades.
+        """
+
+        ipv6_set = self._run_nft(
+            [
+                "list",
+                "set",
+                "inet",
+                self.TABLE_NAME,
+                self.IPV6_BLOCK_SET,
+            ],
+            check=False,
+        )
+
+        input_chain = self._run_nft(
+            [
+                "list",
+                "chain",
+                "inet",
+                self.TABLE_NAME,
+                "input",
+            ]
+        )
+
+        migration_commands = []
+
+        if ipv6_set.returncode != 0:
+            migration_commands.append(
+                f"add set inet {self.TABLE_NAME} "
+                f"{self.IPV6_BLOCK_SET} {{ "
+                "type ipv6_addr; flags timeout; "
+                f"timeout {self.block_duration_seconds}s; "
+                "}"
+            )
+
+        if self.IPV6_RULE_COMMENT not in input_chain.stdout:
+            migration_commands.append(
+                f"add rule inet {self.TABLE_NAME} input "
+                f"tcp dport {self.protected_port} "
+                f"ip6 saddr @{self.IPV6_BLOCK_SET} drop "
+                f'comment "{self.IPV6_RULE_COMMENT}"'
+            )
+
+        if migration_commands:
+            self._run_nft(
+                ["-f", "-"],
+                input_text=(
+                    "\n".join(migration_commands)
+                ),
+            )
 
     def setup(self):
         """
@@ -128,17 +198,26 @@ class FirewallManager:
         )
 
         if existing_table.returncode == 0:
+            self._ensure_ipv6_support()
+
             print(
                 "[FIREWALL] Existing SSHGuard "
-                "nftables table preserved"
+                "nftables table preserved and "
+                "dual-stack support verified"
             )
             return
 
         ruleset = f"""
 table inet {self.TABLE_NAME} {{
 
-    set {self.BLOCK_SET} {{
+    set {self.IPV4_BLOCK_SET} {{
         type ipv4_addr
+        flags timeout
+        timeout {self.block_duration_seconds}s
+    }}
+
+    set {self.IPV6_BLOCK_SET} {{
+        type ipv6_addr
         flags timeout
         timeout {self.block_duration_seconds}s
     }}
@@ -153,7 +232,10 @@ table inet {self.TABLE_NAME} {{
         iifname "tailscale0" return
 
         # Drop protected SSH traffic from blocked IPv4 sources.
-        tcp dport {self.protected_port} ip saddr @{self.BLOCK_SET} drop
+        tcp dport {self.protected_port} ip saddr @{self.IPV4_BLOCK_SET} drop
+
+        # Apply the same temporary response to blocked IPv6 sources.
+        tcp dport {self.protected_port} ip6 saddr @{self.IPV6_BLOCK_SET} drop comment "{self.IPV6_RULE_COMMENT}"
     }}
 }}
 """
@@ -183,7 +265,7 @@ table inet {self.TABLE_NAME} {{
         source_ip: str,
     ):
         """
-        Attempt to temporarily block an IPv4 source.
+        Attempt to temporarily block an IPv4 or IPv6 source.
 
         The return value describes the exact response
         outcome rather than using only True/False.
@@ -192,7 +274,7 @@ table inet {self.TABLE_NAME} {{
         """
 
         try:
-            address = ipaddress.ip_address(
+            address = parse_source_address(
                 source_ip
             )
 
@@ -204,21 +286,16 @@ table inet {self.TABLE_NAME} {{
 
             return FirewallResult.INVALID_IP
 
-        if address.version != 4:
-            print(
-                "[FIREWALL] Unsupported IP version: "
-                f"{source_ip}"
-            )
+        canonical_source_ip = str(address)
+        block_set = self._block_set_for_address(
+            address
+        )
 
-            return (
-                FirewallResult
-                .UNSUPPORTED_IP_VERSION
-            )
-
-        if self.is_whitelisted(source_ip):
+        if self.is_whitelisted(canonical_source_ip):
             print(
                 "[FIREWALL] WHITELISTED - "
-                f"will not block {source_ip}"
+                "will not block "
+                f"{canonical_source_ip}"
             )
 
             return FirewallResult.WHITELISTED
@@ -226,7 +303,7 @@ table inet {self.TABLE_NAME} {{
         if self.response_mode == "dry-run":
             print(
                 "[DRY RUN] Would block IP: "
-                f"{source_ip} for "
+                f"{canonical_source_ip} for "
                 f"{self.block_duration_seconds} "
                 "seconds"
             )
@@ -236,8 +313,8 @@ table inet {self.TABLE_NAME} {{
         command = (
             f"add element inet "
             f"{self.TABLE_NAME} "
-            f"{self.BLOCK_SET} "
-            f"{{ {source_ip} timeout "
+            f"{block_set} "
+            f"{{ {canonical_source_ip} timeout "
             f"{self.block_duration_seconds}s }}"
         )
 
@@ -251,7 +328,7 @@ table inet {self.TABLE_NAME} {{
             if "File exists" in result.stderr:
                 print(
                     "[FIREWALL] IP already blocked: "
-                    f"{source_ip}"
+                    f"{canonical_source_ip}"
                 )
 
                 return (
@@ -260,12 +337,14 @@ table inet {self.TABLE_NAME} {{
                 )
 
             raise RuntimeError(
-                f"Could not block IP {source_ip}:\n"
+                "Could not block IP "
+                f"{canonical_source_ip}:\n"
                 f"{result.stderr.strip()}"
             )
 
         print(
-            f"[FIREWALL] BLOCKED {source_ip} "
+            "[FIREWALL] BLOCKED "
+            f"{canonical_source_ip} "
             f"for {self.block_duration_seconds} "
             "seconds"
         )
@@ -284,10 +363,28 @@ table inet {self.TABLE_NAME} {{
         nftables timeouts.
         """
 
+        try:
+            address = parse_source_address(
+                source_ip
+            )
+
+        except ValueError:
+            print(
+                "[FIREWALL] Invalid IP address: "
+                f"{source_ip}"
+            )
+
+            return False
+
+        canonical_source_ip = str(address)
+        block_set = self._block_set_for_address(
+            address
+        )
+
         if self.response_mode == "dry-run":
             print(
                 "[DRY RUN] Would manually unblock: "
-                f"{source_ip}"
+                f"{canonical_source_ip}"
             )
 
             return True
@@ -295,8 +392,8 @@ table inet {self.TABLE_NAME} {{
         command = (
             f"delete element inet "
             f"{self.TABLE_NAME} "
-            f"{self.BLOCK_SET} "
-            f"{{ {source_ip} }}"
+            f"{block_set} "
+            f"{{ {canonical_source_ip} }}"
         )
 
         result = self._run_nft(
@@ -308,14 +405,14 @@ table inet {self.TABLE_NAME} {{
         if result.returncode != 0:
             print(
                 "[FIREWALL] IP was not currently "
-                f"blocked: {source_ip}"
+                f"blocked: {canonical_source_ip}"
             )
 
             return False
 
         print(
             "[FIREWALL] MANUALLY UNBLOCKED "
-            f"{source_ip}"
+            f"{canonical_source_ip}"
         )
 
         return True

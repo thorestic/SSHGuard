@@ -3,21 +3,35 @@ import re
 import subprocess
 from datetime import datetime, timezone
 
+from core.ip_address import parse_source_address
+
 
 FAILED_PASSWORD_PATTERN = re.compile(
     r"Failed password for "
     r"(?:(?P<invalid_user>invalid user) )?"
     r"(?P<username>\S+) "
-    r"from (?P<source_ip>[0-9a-fA-F:.]+) "
+    r"from (?P<source_ip>\S+) "
     r"port (?P<source_port>\d+)"
 )
 
 ACCEPTED_LOGIN_PATTERN = re.compile(
     r"Accepted (?P<authentication_method>\S+) for "
     r"(?P<username>\S+) "
-    r"from (?P<source_ip>[0-9a-fA-F:.]+) "
+    r"from (?P<source_ip>\S+) "
     r"port (?P<source_port>\d+)"
 )
+
+
+def _normalized_source_ip(match):
+    try:
+        return str(
+            parse_source_address(
+                match.group("source_ip")
+            )
+        )
+
+    except ValueError:
+        return None
 
 
 def parse_ssh_message(message: str):
@@ -29,10 +43,17 @@ def parse_ssh_message(message: str):
     failed_match = FAILED_PASSWORD_PATTERN.search(message)
 
     if failed_match:
+        source_ip = _normalized_source_ip(
+            failed_match
+        )
+
+        if source_ip is None:
+            return None
+
         return {
             "event_type": "failed_login",
             "username": failed_match.group("username"),
-            "source_ip": failed_match.group("source_ip"),
+            "source_ip": source_ip,
             "source_port": int(
                 failed_match.group("source_port")
             ),
@@ -46,10 +67,17 @@ def parse_ssh_message(message: str):
     )
 
     if accepted_match:
+        source_ip = _normalized_source_ip(
+            accepted_match
+        )
+
+        if source_ip is None:
+            return None
+
         return {
             "event_type": "successful_login",
             "username": accepted_match.group("username"),
-            "source_ip": accepted_match.group("source_ip"),
+            "source_ip": source_ip,
             "source_port": int(
                 accepted_match.group("source_port")
             ),

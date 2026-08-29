@@ -300,7 +300,8 @@ Dry-Run mode is useful during development and testing because it allows detectio
 
 When Real mode is enabled, SSHGuard creates and manages its own nftables firewall table.
 
-A detected source IPv4 address is inserted into a temporary nftables set.
+A detected IPv4 or IPv6 source address is inserted into the
+matching temporary nftables set.
 
 SSH traffic from the blocked source IP to the configured protected SSH port is dropped.
 
@@ -744,6 +745,12 @@ Display currently blocked IPv4 addresses:
 sudo nft list set inet sshguard blocked_ipv4
 ```
 
+Display currently blocked IPv6 addresses:
+
+```bash
+sudo nft list set inet sshguard blocked_ipv6
+```
+
 Example:
 
 ```text
@@ -757,6 +764,11 @@ table inet sshguard {
     }
 }
 ```
+
+The same table contains a `blocked_ipv6` set with type
+`ipv6_addr`. Existing IPv4-only SSHGuard tables are upgraded
+in place when the service starts; active IPv4 timeout state is
+not flushed.
 
 After the timeout expires, the source address is automatically removed.
 

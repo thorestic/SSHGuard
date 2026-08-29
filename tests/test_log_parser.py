@@ -192,14 +192,13 @@ class SSHLogParserTests(unittest.TestCase):
 
     def test_parses_ipv6_failed_login(self):
         """
-        The parser currently understands IPv6 syntax
-        even though the firewall response layer is
-        currently IPv4-only.
+        IPv6 spellings are canonicalized before detection
+        so one address cannot split its attempt counter.
         """
 
         message = (
             "Failed password for mc "
-            "from 2001:db8::10 "
+            "from 2001:0DB8:0:0:0:0:0:10 "
             "port 55000 ssh2"
         )
 
@@ -216,6 +215,65 @@ class SSHLogParserTests(unittest.TestCase):
             event["event_type"],
             "failed_login",
         )
+
+    def test_ignores_scoped_ipv6_address(self):
+        message = (
+            "Failed password for mc "
+            "from fe80::1%eth0 "
+            "port 55000 ssh2"
+        )
+
+        event = parse_ssh_message(message)
+
+        self.assertIsNone(event)
+
+    def test_parses_successful_ipv6_login(self):
+        message = (
+            "Accepted publickey for mc "
+            "from 2001:0DB8:0:0:0:0:0:10 "
+            "port 55000 ssh2"
+        )
+
+        event = parse_ssh_message(message)
+
+        self.assertIsNotNone(event)
+
+        self.assertEqual(
+            event["event_type"],
+            "successful_login",
+        )
+
+        self.assertEqual(
+            event["source_ip"],
+            "2001:db8::10",
+        )
+
+    def test_mapped_ipv6_is_normalized_to_ipv4(self):
+        message = (
+            "Failed password for mc "
+            "from ::ffff:c000:20a "
+            "port 55000 ssh2"
+        )
+
+        event = parse_ssh_message(message)
+
+        self.assertIsNotNone(event)
+
+        self.assertEqual(
+            event["source_ip"],
+            "192.0.2.10",
+        )
+
+    def test_invalid_source_address_is_ignored(self):
+        message = (
+            "Failed password for mc "
+            "from not-an-ip "
+            "port 55000 ssh2"
+        )
+
+        event = parse_ssh_message(message)
+
+        self.assertIsNone(event)
 
 
 if __name__ == "__main__":
