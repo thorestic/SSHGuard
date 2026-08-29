@@ -73,6 +73,16 @@ class ProductionDeploymentTests(unittest.TestCase):
         self.assertIn("dashboard/web/dist/index.html", installer)
         self.assertIn("chown -R root:root", installer)
         self.assertIn("chmod -R go-w", installer)
+        self.assertIn(
+            'chmod 0755 "${release_dir}"',
+            installer,
+        )
+        self.assertIn(
+            'find "${release_dir}/dashboard/web/dist"',
+            installer,
+        )
+        self.assertIn("-type d -exec chmod 0755", installer)
+        self.assertIn("-type f -exec chmod 0644", installer)
         self.assertIn("/var/backups/sshguard", installer)
         self.assertIn(
             'archive --format=tar "${revision}"',

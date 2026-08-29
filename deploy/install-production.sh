@@ -106,6 +106,11 @@ python3 -m venv "${release_dir}/.venv"
 
 chown -R root:root "${release_dir}"
 chmod -R go-w "${release_dir}"
+chmod 0755 "${release_dir}"
+find "${release_dir}/dashboard/web/dist" \
+    -type d -exec chmod 0755 {} +
+find "${release_dir}/dashboard/web/dist" \
+    -type f -exec chmod 0644 {} +
 
 install -d -o root -g "${service_group}" -m 0750 \
     "${state_dir}" "${log_dir}"
