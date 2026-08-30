@@ -1,17 +1,20 @@
 import {
-  BrainCircuit,
+  ArrowRight,
   Code2,
   GraduationCap,
   LockKeyhole,
   Network,
   ShieldCheck,
-  UserRoundSearch,
-  Users,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { PageHeader } from "../components/PageHeader";
 
-const team = ["محمد", "ندى", "ضحى"];
+const team = [
+  "Mohammed Jumaa Abdullah Al-Tahleh",
+  "Nada Nizar Saleh Abu Nada",
+  "Duha Marwan Mohammed Odeh Allah",
+];
 
 const architecture = [
   {
@@ -28,24 +31,6 @@ const architecture = [
     icon: Network,
     title: "Reusable API",
     text: "FastAPI exposes a versioned, read-only contract for this dashboard and a future Windows client.",
-  },
-];
-
-const roadmap = [
-  {
-    icon: UserRoundSearch,
-    title: "SOC analyst workflow",
-    text: "Alert triage, evidence review, temporary containment, analyst decisions, and incident response notes.",
-  },
-  {
-    icon: BrainCircuit,
-    title: "Human-guided AI",
-    text: "Incident summaries, timeline explanation, clustering, and recommendations without autonomous firewall control.",
-  },
-  {
-    icon: Users,
-    title: "Role-based access",
-    text: "Viewer, Analyst, and Administrator accounts with least privilege and a complete audit trail.",
   },
 ];
 
@@ -104,14 +89,14 @@ export function AboutPage() {
             {team.map((name, index) => (
               <div className="team-member" key={name}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
-                <strong lang="ar" dir="rtl">{name}</strong>
+                <strong>{name}</strong>
                 <small>Cybersecurity student</small>
               </div>
             ))}
           </div>
           <div className="supervisor-row">
             <GraduationCap size={19} />
-            <div><span>Project supervisor</span><strong lang="ar" dir="rtl">المهندس عبدالرحمن</strong></div>
+            <div><span>Project supervisor</span><strong>Dr. Abdulrahman</strong></div>
           </div>
         </article>
 
@@ -152,21 +137,17 @@ export function AboutPage() {
       <section className="about-section">
         <div className="about-section__heading">
           <span className="eyebrow">FUTURE VISION</span>
-          <h2>Planned capabilities</h2>
-          <p>These capabilities describe the roadmap and are not presented as active features.</p>
+          <h2>Product roadmap</h2>
+          <p>Explore ideas reserved for future development. None of them are presented as active capabilities.</p>
         </div>
-        <div className="about-card-grid">
-          {roadmap.map(({ icon: Icon, title, text }) => (
-            <article className="about-card about-card--future" key={title}>
-              <div className="about-card__top">
-                <span className="about-card__icon"><Icon size={20} /></span>
-                <span className="planned-badge">PLANNED</span>
-              </div>
-              <h3>{title}</h3>
-              <p>{text}</p>
-            </article>
-          ))}
-        </div>
+        <Link className="roadmap-entry" to="/roadmap">
+          <div>
+            <span className="planned-badge">PLANNED · NOT IMPLEMENTED</span>
+            <h3>Future development of SSHGuard</h3>
+            <p>Review the proposed analyst workflow, access control, optional AI assistance, response policies, and future client expansion.</p>
+          </div>
+          <span className="roadmap-entry__action">View roadmap <ArrowRight size={17} /></span>
+        </Link>
       </section>
     </>
   );

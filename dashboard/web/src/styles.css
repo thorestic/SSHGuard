@@ -223,7 +223,7 @@ select { padding: 9px 32px 9px 11px; color: #aebeb9; background: #091310; border
 .about-people-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 28px; }
 .about-panel { padding: 22px; }
 .team-list { display: grid; gap: 8px; }
-.team-member { display: grid; grid-template-columns: 34px minmax(90px, .5fr) 1fr; align-items: center; gap: 12px; padding: 12px; background: #0a1412; border: 1px solid #1b2a26; border-radius: 8px; }
+.team-member { display: grid; grid-template-columns: 34px minmax(190px, 1fr) auto; align-items: center; gap: 12px; padding: 12px; background: #0a1412; border: 1px solid #1b2a26; border-radius: 8px; }
 .team-member > span { color: #587068; font-family: "DM Mono", monospace; font-size: 9px; }
 .team-member strong { color: #d6e4df; font-size: 13px; text-align: left; }
 .team-member small { color: #71857e; font-size: 10px; }
@@ -236,9 +236,26 @@ select { padding: 9px 32px 9px 11px; color: #aebeb9; background: #091310; border
 .affiliation-grid a:hover { transform: translateY(-2px); border-color: var(--accent); }
 .affiliation-grid img { max-width: 100%; max-height: 78px; object-fit: contain; }
 .about-github { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--accent); font-size: 11px; font-weight: 600; }
+.roadmap-entry { display: flex; justify-content: space-between; align-items: center; gap: 24px; min-height: 150px; padding: 24px; background: linear-gradient(135deg, #0d1b17, #10241e); border: 1px solid #285643; border-radius: 10px; transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
+.roadmap-entry:hover { transform: translateY(-2px); border-color: var(--accent); box-shadow: 0 14px 35px rgba(0, 0, 0, .18); }
+.roadmap-entry h3 { margin: 14px 0 8px; font-size: 17px; }
+.roadmap-entry p { max-width: 760px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.roadmap-entry__action { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; color: var(--accent); font-size: 11px; font-weight: 700; }
+.roadmap-notice { display: flex; align-items: center; gap: 18px; margin-bottom: 16px; padding: 20px; border-color: #4b4125; }
+.roadmap-notice .planned-badge { flex: 0 0 auto; color: var(--warning); border-color: #665325; }
+.roadmap-notice h2 { margin: 0 0 7px; }
+.roadmap-notice p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.roadmap-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.roadmap-card { min-height: 230px; display: flex; flex-direction: column; padding: 21px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.roadmap-card__top { display: flex; justify-content: space-between; align-items: center; }
+.roadmap-card__top > span:last-child { color: #526a62; font-family: "DM Mono", monospace; font-size: 10px; }
+.roadmap-card h2 { margin: 19px 0 9px; }
+.roadmap-card p { margin: 0 0 22px; color: var(--muted); font-size: 11px; line-height: 1.65; }
+.roadmap-card > .planned-badge { width: fit-content; margin-top: auto; }
 
 @media (max-width: 1250px) {
   .metric-grid { grid-template-columns: repeat(3, 1fr); }
+  .roadmap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -261,6 +278,7 @@ select { padding: 9px 32px 9px 11px; color: #aebeb9; background: #091310; border
   .incident-facts { grid-template-columns: repeat(2, 1fr); }
   .incident-facts > div:nth-child(2) { border-right: 0; }
   .incident-facts > div:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+  .roadmap-entry { align-items: flex-start; flex-direction: column; }
 }
 
 @media (max-width: 680px) {
@@ -286,4 +304,6 @@ select { padding: 9px 32px 9px 11px; color: #aebeb9; background: #091310; border
   .incident-facts { grid-template-columns: 1fr; }
   .incident-facts > div { border-right: 0; border-bottom: 1px solid var(--border); }
   .incident-facts > div:last-child { border-bottom: 0; }
+  .roadmap-notice { align-items: flex-start; flex-direction: column; }
+  .roadmap-grid { grid-template-columns: 1fr; }
 }
