@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -64,6 +65,22 @@ class AuthenticationEventList(ApiModel):
 class FirewallActionList(ApiModel):
     items: list[FirewallAction]
     pagination: Pagination
+
+
+class FirewallReconciliationResponse(ApiModel):
+    status: Literal[
+        "pending",
+        "in_sync",
+        "drift",
+        "unavailable",
+        "stale",
+    ]
+    checked_at: datetime | None
+    expected_count: int = Field(ge=0)
+    actual_count: int | None = Field(default=None, ge=0)
+    missing_in_firewall: list[str]
+    unexpected_in_firewall: list[str]
+    error_code: str | None
 
 
 class OverviewMetrics(ApiModel):

@@ -97,6 +97,13 @@ same contract reusable by the web dashboard and a future Windows client.
 
 The dashboard API remains read-only and does not execute nftables commands.
 
+The privileged core also performs a report-only enforcement reconciliation.
+Every ten seconds it compares unexpired block actions in SQLite with the
+addresses present in the `blocked_ipv4` and `blocked_ipv6` nftables sets. It
+stores only the current status and any differences. The API exposes that
+snapshot through `GET /api/v1/firewall-reconciliation`; it never repairs a
+difference automatically.
+
 Live-update timing can be configured with:
 
 ```text
@@ -503,7 +510,8 @@ sshguard/
 │   ├── __init__.py
 │   ├── log_parser.py
 │   ├── detector.py
-│   └── firewall.py
+│   ├── firewall.py
+│   └── firewall_reconciliation.py
 ├── tests/
 │   ├── __init__.py
 │   └── test_detector.py
@@ -591,6 +599,16 @@ Responsible for:
 - Protecting the configured SSH service
 - Supporting automatic timeout-based block expiration
 - Supporting manual unblock operations
+
+### `core/firewall_reconciliation.py`
+
+Responsible for:
+
+- Reading the SSHGuard IPv4 and IPv6 nftables sets as structured JSON
+- Comparing actual enforcement with active block records in SQLite
+- Reporting missing and unexpected firewall addresses
+- Persisting only the latest reconciliation snapshot
+- Never adding, deleting, or repairing firewall state
 
 ---
 
@@ -866,6 +884,7 @@ git status
 - Live SSE change notifications
 - Automatic dashboard refresh and stream reconnection
 - Project branding and About page
+- Report-only SQLite-to-nftables enforcement reconciliation
 
 ---
 

@@ -30,7 +30,7 @@ export function OverviewPage() {
             <MetricCard detail="Recorded across all time" icon={ShieldAlert} label="Total incidents" value={data.metrics.incidents_total} />
             <MetricCard detail="Detected during the last 24 hours" icon={TriangleAlert} label="Incidents · 24h" tone="danger" value={data.metrics.incidents_24h} />
             <MetricCard detail="Rejected SSH authentication attempts" icon={Ban} label="Failed logins · 24h" tone="danger" value={data.metrics.failed_logins_24h} />
-            <MetricCard detail="Currently enforced by nftables" icon={Network} label="Active blocks" value={data.metrics.active_blocks} />
+            <MetricCard detail="Expected from active SQLite records" icon={Network} label="Active blocks" value={data.metrics.active_blocks} />
             <MetricCard detail="Distinct IP addresses observed" icon={Users} label="Unique sources · 24h" value={data.metrics.unique_sources_24h} />
             <MetricCard detail="Accepted SSH sessions" icon={CircleCheck} label="Successful logins · 24h" tone="success" value={data.metrics.successful_logins_24h} />
           </section>

@@ -9,6 +9,7 @@ from config import (
     THRESHOLD,
     WINDOW_SECONDS,
     BLOCK_DURATION_SECONDS,
+    FIREWALL_RECONCILIATION_INTERVAL_SECONDS,
     PROTECTED_SSH_PORT,
     RESPONSE_MODE,
     WHITELIST_NETWORKS,
@@ -26,6 +27,10 @@ from core.block_monitor import (
 )
 from core.logging_config import setup_logging
 from core.runtime_config import RuntimeSettings
+from core.firewall_reconciliation import (
+    FirewallReconciliationMonitor,
+    NftablesStateInspector,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -192,6 +197,23 @@ def main():
     logger.info(
         "Block lifecycle monitor started"
     )
+
+    if RESPONSE_MODE == "real":
+        reconciliation_monitor = (
+            FirewallReconciliationMonitor(
+                database=database,
+                inspector=NftablesStateInspector(),
+                check_interval_seconds=(
+                    FIREWALL_RECONCILIATION_INTERVAL_SECONDS
+                ),
+            )
+        )
+        reconciliation_monitor.start()
+
+        logger.info(
+            "Read-only firewall reconciliation "
+            "monitor started"
+        )
 
     print(
         "\n[+] SSH event monitoring started"

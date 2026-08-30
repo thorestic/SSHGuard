@@ -41,6 +41,16 @@ export interface FirewallAction {
   related_action_id: number | null;
 }
 
+export interface FirewallReconciliation {
+  status: "pending" | "in_sync" | "drift" | "unavailable" | "stale";
+  checked_at: string | null;
+  expected_count: number;
+  actual_count: number | null;
+  missing_in_firewall: string[];
+  unexpected_in_firewall: string[];
+  error_code: string | null;
+}
+
 export interface OverviewMetrics {
   incidents_total: number;
   incidents_24h: number;

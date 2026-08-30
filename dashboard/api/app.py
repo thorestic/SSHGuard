@@ -10,7 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from .config import DashboardSettings
 from .live import security_event_stream
 from .repository import DatabaseUnavailable, SecurityReadRepository
-from .routers import analytics, authentication, firewall, incidents, overview
+from .routers import (
+    analytics,
+    authentication,
+    firewall,
+    firewall_reconciliation,
+    incidents,
+    overview,
+)
 from .schemas import HealthResponse
 
 
@@ -38,7 +45,10 @@ def create_app(
     )
 
     application.state.repository = SecurityReadRepository(
-        selected_database
+        selected_database,
+        reconciliation_stale_seconds=(
+            settings.reconciliation_stale_seconds
+        ),
     )
 
     application.add_middleware(
@@ -116,6 +126,10 @@ def create_app(
     )
     application.include_router(
         firewall.router,
+        prefix="/api/v1",
+    )
+    application.include_router(
+        firewall_reconciliation.router,
         prefix="/api/v1",
     )
     application.include_router(

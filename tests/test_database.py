@@ -118,6 +118,16 @@ class DatabaseManagerTests(unittest.TestCase):
             tables,
         )
 
+        self.assertIn(
+            "firewall_reconciliation",
+            tables,
+        )
+
+        self.assertIn(
+            "firewall_reconciliation_items",
+            tables,
+        )
+
     def test_auth_event_is_persisted(self):
         event = self.sample_event()
 
@@ -566,6 +576,99 @@ class DatabaseManagerTests(unittest.TestCase):
             expired,
             [],
         )
+
+    def test_expected_active_blocks_exclude_finished_and_expired_rows(self):
+        active_block_id = self.database.save_firewall_action(
+            source_ip="192.0.2.10",
+            action="block",
+            timestamp="2026-08-27T10:00:00+00:00",
+            expires_at="2026-08-27T10:10:00+00:00",
+        )
+        self.database.save_firewall_action(
+            source_ip="192.0.2.10",
+            action="block",
+            timestamp="2026-08-27T10:01:00+00:00",
+            expires_at="2026-08-27T10:11:00+00:00",
+        )
+        finished_block_id = self.database.save_firewall_action(
+            source_ip="198.51.100.20",
+            action="block",
+            timestamp="2026-08-27T10:00:00+00:00",
+            expires_at="2026-08-27T10:10:00+00:00",
+        )
+        self.database.save_firewall_action(
+            source_ip="198.51.100.20",
+            action="manual_unblock",
+            timestamp="2026-08-27T10:02:00+00:00",
+            related_action_id=finished_block_id,
+        )
+        self.database.save_firewall_action(
+            source_ip="203.0.113.30",
+            action="block",
+            timestamp="2026-08-27T09:00:00+00:00",
+            expires_at="2026-08-27T09:01:00+00:00",
+        )
+
+        expected = self.database.get_expected_active_blocks(
+            "2026-08-27T10:05:00+00:00"
+        )
+
+        self.assertEqual(expected, ["192.0.2.10"])
+        self.assertIsInstance(active_block_id, int)
+
+    def test_reconciliation_replaces_previous_current_state(self):
+        self.database.replace_firewall_reconciliation(
+            status="drift",
+            checked_at="2026-08-27T10:05:00+00:00",
+            expected_count=1,
+            actual_count=2,
+            items=[
+                (
+                    "198.51.100.20",
+                    "unexpected_in_firewall",
+                )
+            ],
+        )
+
+        self.database.replace_firewall_reconciliation(
+            status="in_sync",
+            checked_at="2026-08-27T10:05:10+00:00",
+            expected_count=1,
+            actual_count=1,
+            items=[],
+        )
+
+        with self.connect() as connection:
+            summary = connection.execute(
+                """
+                SELECT
+                    status,
+                    checked_at,
+                    expected_count,
+                    actual_count,
+                    error_code
+                FROM firewall_reconciliation
+                WHERE id = 1
+                """
+            ).fetchone()
+            item_count = connection.execute(
+                """
+                SELECT COUNT(*)
+                FROM firewall_reconciliation_items
+                """
+            ).fetchone()[0]
+
+        self.assertEqual(
+            summary,
+            (
+                "in_sync",
+                "2026-08-27T10:05:10+00:00",
+                1,
+                1,
+                None,
+            ),
+        )
+        self.assertEqual(item_count, 0)
 
     def test_response_skipped_is_persisted(self):
         incident_id = (

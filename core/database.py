@@ -93,6 +93,55 @@ class DatabaseManager:
                 """
             )
 
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS firewall_reconciliation (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    status TEXT NOT NULL CHECK (
+                        status IN (
+                            'pending',
+                            'in_sync',
+                            'drift',
+                            'unavailable'
+                        )
+                    ),
+                    checked_at TEXT,
+                    expected_count INTEGER NOT NULL DEFAULT 0,
+                    actual_count INTEGER,
+                    error_code TEXT
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS firewall_reconciliation_items (
+                    source_ip TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK (
+                        state IN (
+                            'missing_in_firewall',
+                            'unexpected_in_firewall'
+                        )
+                    ),
+                    PRIMARY KEY (source_ip, state)
+                )
+                """
+            )
+
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO firewall_reconciliation (
+                    id,
+                    status,
+                    checked_at,
+                    expected_count,
+                    actual_count,
+                    error_code
+                )
+                VALUES (1, 'pending', NULL, 0, NULL, NULL)
+                """
+            )
+
             self._migrate_incidents_table(
                 connection
             )
@@ -274,6 +323,93 @@ class DatabaseManager:
                 """,
                 (current_time,),
             ).fetchall()
+
+    def get_expected_active_blocks(
+        self,
+        current_time: str,
+    ):
+        """Return addresses whose stored blocks should still be active."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT block.source_ip
+                FROM firewall_actions AS block
+                WHERE
+                    block.action = 'block'
+                    AND block.expires_at IS NOT NULL
+                    AND block.expires_at > ?
+                    AND NOT EXISTS (
+                        SELECT 1
+                        FROM firewall_actions AS finished
+                        WHERE
+                            finished.related_action_id = block.id
+                            AND finished.action IN (
+                                'expired',
+                                'manual_unblock'
+                            )
+                    )
+                ORDER BY block.source_ip
+                """,
+                (current_time,),
+            ).fetchall()
+
+        return [row[0] for row in rows]
+
+    def replace_firewall_reconciliation(
+        self,
+        *,
+        status: str,
+        checked_at: str,
+        expected_count: int,
+        actual_count: int | None,
+        items: list[tuple[str, str]],
+        error_code: str | None = None,
+    ):
+        """Atomically replace the current report-only firewall snapshot."""
+
+        with self._connection() as connection:
+            connection.execute(
+                "DELETE FROM firewall_reconciliation_items"
+            )
+
+            connection.executemany(
+                """
+                INSERT INTO firewall_reconciliation_items (
+                    source_ip,
+                    state
+                )
+                VALUES (?, ?)
+                """,
+                items,
+            )
+
+            connection.execute(
+                """
+                INSERT INTO firewall_reconciliation (
+                    id,
+                    status,
+                    checked_at,
+                    expected_count,
+                    actual_count,
+                    error_code
+                )
+                VALUES (1, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    status = excluded.status,
+                    checked_at = excluded.checked_at,
+                    expected_count = excluded.expected_count,
+                    actual_count = excluded.actual_count,
+                    error_code = excluded.error_code
+                """,
+                (
+                    status,
+                    checked_at,
+                    expected_count,
+                    actual_count,
+                    error_code,
+                ),
+            )
 
     def update_incident_status(
         self,

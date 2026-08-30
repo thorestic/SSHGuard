@@ -121,6 +121,59 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(action["action"], "block")
         self.assertEqual(action["incident_id"], 1)
 
+    def test_firewall_reconciliation_exposes_current_drift_only(self):
+        self.database.replace_firewall_reconciliation(
+            status="drift",
+            checked_at=self.now.isoformat(),
+            expected_count=1,
+            actual_count=1,
+            items=[
+                (
+                    "192.0.2.44",
+                    "missing_in_firewall",
+                ),
+                (
+                    "198.51.100.20",
+                    "unexpected_in_firewall",
+                ),
+            ],
+        )
+
+        response = self.client.get(
+            "/api/v1/firewall-reconciliation"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "drift")
+        self.assertEqual(
+            payload["missing_in_firewall"],
+            ["192.0.2.44"],
+        )
+        self.assertEqual(
+            payload["unexpected_in_firewall"],
+            ["198.51.100.20"],
+        )
+        self.assertNotIn("command", payload)
+
+    def test_old_firewall_reconciliation_is_marked_stale(self):
+        self.database.replace_firewall_reconciliation(
+            status="in_sync",
+            checked_at=(
+                self.now - timedelta(minutes=1)
+            ).isoformat(),
+            expected_count=0,
+            actual_count=0,
+            items=[],
+        )
+
+        response = self.client.get(
+            "/api/v1/firewall-reconciliation"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "stale")
+
     def test_analytics_returns_rankings_and_breakdowns(self):
         response = self.client.get(
             "/api/v1/analytics",

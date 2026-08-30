@@ -37,10 +37,19 @@ class SecurityReadRepository:
         "auth_events",
         "incidents",
         "firewall_actions",
+        "firewall_reconciliation",
+        "firewall_reconciliation_items",
     }
 
-    def __init__(self, database_path: str | Path):
+    def __init__(
+        self,
+        database_path: str | Path,
+        reconciliation_stale_seconds: float = 30.0,
+    ):
         self.database_path = Path(database_path)
+        self.reconciliation_stale_seconds = (
+            reconciliation_stale_seconds
+        )
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -262,6 +271,80 @@ class SecurityReadRepository:
             ).fetchall()
 
         return self._rows(rows), total
+
+    def firewall_reconciliation(self) -> dict[str, Any]:
+        """Return the latest report-only enforcement comparison."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    reconciliation.status,
+                    reconciliation.checked_at,
+                    reconciliation.expected_count,
+                    reconciliation.actual_count,
+                    reconciliation.error_code,
+                    item.source_ip,
+                    item.state
+                FROM firewall_reconciliation AS reconciliation
+                LEFT JOIN firewall_reconciliation_items AS item
+                    ON 1 = 1
+                WHERE reconciliation.id = 1
+                ORDER BY item.state, item.source_ip
+                """
+            ).fetchall()
+
+        if not rows:
+            return {
+                "status": "pending",
+                "checked_at": None,
+                "expected_count": 0,
+                "actual_count": None,
+                "missing_in_firewall": [],
+                "unexpected_in_firewall": [],
+                "error_code": None,
+            }
+
+        missing = []
+        unexpected = []
+
+        for row in rows:
+            if row["state"] == "missing_in_firewall":
+                missing.append(row["source_ip"])
+            elif row["state"] == "unexpected_in_firewall":
+                unexpected.append(row["source_ip"])
+
+        summary = rows[0]
+        payload = {
+            "status": summary["status"],
+            "checked_at": summary["checked_at"],
+            "expected_count": summary["expected_count"],
+            "actual_count": summary["actual_count"],
+            "error_code": summary["error_code"],
+            "missing_in_firewall": missing,
+            "unexpected_in_firewall": unexpected,
+        }
+
+        if payload["checked_at"] is not None:
+            try:
+                checked_at = datetime.fromisoformat(
+                    payload["checked_at"]
+                )
+                if checked_at.tzinfo is None:
+                    raise ValueError(
+                        "reconciliation timestamp must include a timezone"
+                    )
+
+                age = datetime.now(timezone.utc) - checked_at
+                if age.total_seconds() > self.reconciliation_stale_seconds:
+                    payload["status"] = "stale"
+            except (TypeError, ValueError):
+                payload["status"] = "unavailable"
+                payload["error_code"] = (
+                    "reconciliation_timestamp_invalid"
+                )
+
+        return payload
 
     def overview(self) -> dict[str, Any]:
         now = datetime.now(timezone.utc)

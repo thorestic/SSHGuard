@@ -9,9 +9,10 @@ reuse the same versioned HTTP contract.
 
 ```text
 SSH journal -> parser -> detector -> SQLite -> read-only API -> clients
-                              |                        |-> React dashboard
-                              |                        `-> future Windows GUI
-                              `-> nftables response
+                              ^  ^                      |-> React dashboard
+                              |  |                      `-> future Windows GUI
+                              |  `-- report-only reconciliation snapshot
+                              `----- nftables response + read-only inspection
 ```
 
 The API opens SQLite with both URI `mode=ro` and `PRAGMA query_only = ON`.
@@ -26,7 +27,16 @@ There are no POST, PUT, PATCH, or DELETE operations in `/api/v1`.
 | `GET /api/v1/incidents` | Paginated and filterable incidents |
 | `GET /api/v1/authentication-events` | Paginated SSH authentication history |
 | `GET /api/v1/firewall-actions` | nftables response audit trail |
+| `GET /api/v1/firewall-reconciliation` | Expected SQLite blocks compared with enforced nftables sets |
 | `GET /api/v1/analytics` | Timeline, rankings, and breakdowns |
+
+The reconciliation endpoint is report-only. The privileged security core reads
+the two SSHGuard nftables sets using structured JSON output and stores a small
+current-state snapshot in SQLite. The unprivileged API never runs `nft`, and no
+automatic add/delete repair is performed when drift is found.
+
+If the latest snapshot is older than 30 seconds, the API reports `stale` so a
+client does not mistake an old successful comparison for current protection.
 
 Interactive API documentation is available at `/api/docs`.
 

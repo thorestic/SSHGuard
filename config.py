@@ -9,6 +9,10 @@ WINDOW_SECONDS = 20
 # Firewall response settings
 BLOCK_DURATION_SECONDS = 60
 
+# How often the security core compares its stored
+# active blocks with the nftables enforcement state.
+FIREWALL_RECONCILIATION_INTERVAL_SECONDS = 10
+
 # SSH service protected by SSHGuard
 PROTECTED_SSH_PORT = 22
 

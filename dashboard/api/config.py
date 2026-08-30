@@ -12,6 +12,7 @@ class DashboardSettings:
     cors_origins: tuple[str, ...]
     live_poll_seconds: float
     live_heartbeat_seconds: float
+    reconciliation_stale_seconds: float
 
     @classmethod
     def from_environment(cls) -> "DashboardSettings":
@@ -45,6 +46,10 @@ class DashboardSettings:
             live_heartbeat_seconds=cls._positive_float(
                 "SSHGUARD_LIVE_HEARTBEAT_SECONDS",
                 15.0,
+            ),
+            reconciliation_stale_seconds=cls._positive_float(
+                "SSHGUARD_RECONCILIATION_STALE_SECONDS",
+                30.0,
             ),
         )
 

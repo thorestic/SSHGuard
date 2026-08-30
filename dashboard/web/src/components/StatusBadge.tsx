@@ -1,8 +1,8 @@
 import { humanize } from "../utils/format";
 
-const positive = new Set(["resolved", "successful_login", "expired"]);
-const negative = new Set(["blocked", "response_failed", "failed_login", "block"]);
-const warning = new Set(["detected", "response_skipped", "manual_unblock"]);
+const positive = new Set(["resolved", "successful_login", "expired", "in_sync"]);
+const negative = new Set(["blocked", "response_failed", "failed_login", "block", "drift"]);
+const warning = new Set(["detected", "response_skipped", "manual_unblock", "unavailable", "stale"]);
 
 export function StatusBadge({ value }: { value: string | null }) {
   const normalized = value ?? "pending";
