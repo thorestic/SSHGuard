@@ -41,6 +41,12 @@ export interface FirewallAction {
   related_action_id: number | null;
 }
 
+export interface IncidentDetail {
+  incident: Incident;
+  authentication_events: AuthenticationEvent[];
+  firewall_actions: FirewallAction[];
+}
+
 export interface FirewallReconciliation {
   status: "pending" | "in_sync" | "drift" | "unavailable" | "stale";
   checked_at: string | null;

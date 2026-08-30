@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..dependencies import get_repository
 from ..repository import SecurityReadRepository
-from ..schemas import IncidentList, Pagination
+from ..schemas import IncidentDetail, IncidentList, Pagination
 
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
@@ -36,4 +36,23 @@ def list_incidents(
             offset=offset,
         ),
     )
+
+
+@router.get("/{incident_id}", response_model=IncidentDetail)
+def get_incident_detail(
+    incident_id: int,
+    repository: Annotated[
+        SecurityReadRepository,
+        Depends(get_repository),
+    ],
+) -> IncidentDetail:
+    detail = repository.get_incident_detail(incident_id)
+
+    if detail is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Incident not found",
+        )
+
+    return IncidentDetail(**detail)
 

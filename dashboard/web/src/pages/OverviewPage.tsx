@@ -50,7 +50,7 @@ export function OverviewPage() {
                     <tbody>
                       {data.recent_incidents.map((incident) => (
                         <tr key={incident.id}>
-                          <td><span className="mono">{incident.source_ip}</span></td>
+                          <td><Link className="incident-link" to={`/incidents/${incident.id}`}>{incident.source_ip}</Link></td>
                           <td>{incident.username ?? "Unknown"}</td>
                           <td>{incident.attempt_count}</td>
                           <td><StatusBadge value={incident.status} /></td>

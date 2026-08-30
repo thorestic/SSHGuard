@@ -46,6 +46,12 @@ class FirewallAction(ApiModel):
     related_action_id: int | None
 
 
+class IncidentDetail(ApiModel):
+    incident: Incident
+    authentication_events: list[AuthenticationEvent]
+    firewall_actions: list[FirewallAction]
+
+
 class Pagination(ApiModel):
     total: int = Field(ge=0)
     limit: int = Field(ge=1)

@@ -11,6 +11,9 @@ const OverviewPage = lazy(() =>
 const IncidentsPage = lazy(() =>
   import("./pages/IncidentsPage").then((module) => ({ default: module.IncidentsPage })),
 );
+const IncidentDetailPage = lazy(() =>
+  import("./pages/IncidentDetailPage").then((module) => ({ default: module.IncidentDetailPage })),
+);
 const AuthenticationPage = lazy(() =>
   import("./pages/AuthenticationPage").then((module) => ({ default: module.AuthenticationPage })),
 );
@@ -33,6 +36,7 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route element={<OverviewPage />} index />
               <Route element={<IncidentsPage />} path="incidents" />
+              <Route element={<IncidentDetailPage />} path="incidents/:incidentId" />
               <Route element={<AuthenticationPage />} path="authentication" />
               <Route element={<FirewallPage />} path="firewall" />
               <Route element={<AnalyticsPage />} path="analytics" />

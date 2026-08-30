@@ -25,6 +25,7 @@ There are no POST, PUT, PATCH, or DELETE operations in `/api/v1`.
 | `GET /api/v1/health` | Database and schema availability |
 | `GET /api/v1/overview` | Current operational metrics |
 | `GET /api/v1/incidents` | Paginated and filterable incidents |
+| `GET /api/v1/incidents/{incident_id}` | One incident with correlated authentication evidence and linked firewall actions |
 | `GET /api/v1/authentication-events` | Paginated SSH authentication history |
 | `GET /api/v1/firewall-actions` | nftables response audit trail |
 | `GET /api/v1/firewall-reconciliation` | Expected SQLite blocks compared with enforced nftables sets |

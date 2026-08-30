@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { toQuery } from "../api/client";
 import type { Incident, PaginatedResponse } from "../api/types";
@@ -38,8 +39,8 @@ export function IncidentsPage() {
         {error && !data ? <ErrorState message={error} onRetry={refresh} /> : null}
         {data?.items.length === 0 ? <EmptyState message="No incidents match the current filters." /> : null}
         {data && data.items.length > 0 ? (
-          <div className="table-wrap"><table><thead><tr><th>ID</th><th>Source</th><th>Target</th><th>Attempts</th><th>Status</th><th>Response</th><th>First seen</th><th>Last seen</th></tr></thead><tbody>
-            {data.items.map((incident) => <tr key={incident.id}><td className="muted">#{incident.id}</td><td><span className="mono">{incident.source_ip}</span></td><td>{incident.username ?? "Unknown"}</td><td><strong>{incident.attempt_count}</strong><span className="cell-note">/{incident.window_seconds}s</span></td><td><StatusBadge value={incident.status} /></td><td><StatusBadge value={incident.response_outcome} /></td><td>{formatDateTime(incident.first_seen)}</td><td>{formatDateTime(incident.last_seen)}</td></tr>)}
+          <div className="table-wrap"><table><thead><tr><th>ID</th><th>Source</th><th>Target</th><th>Attempts</th><th>Status</th><th>Response</th><th>First seen</th><th>Last seen</th><th>Investigation</th></tr></thead><tbody>
+            {data.items.map((incident) => <tr key={incident.id}><td><Link className="incident-link" to={`/incidents/${incident.id}`}>#{incident.id}</Link></td><td><span className="mono">{incident.source_ip}</span></td><td>{incident.username ?? "Unknown"}</td><td><strong>{incident.attempt_count}</strong><span className="cell-note">/{incident.window_seconds}s</span></td><td><StatusBadge value={incident.status} /></td><td><StatusBadge value={incident.response_outcome} /></td><td>{formatDateTime(incident.first_seen)}</td><td>{formatDateTime(incident.last_seen)}</td><td><Link className="text-link" to={`/incidents/${incident.id}`}>View details →</Link></td></tr>)}
           </tbody></table></div>
         ) : null}
         {data ? <PaginationControls limit={limit} offset={offset} onChange={setOffset} total={data.pagination.total} /> : null}

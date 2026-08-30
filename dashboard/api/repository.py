@@ -272,6 +272,92 @@ class SecurityReadRepository:
 
         return self._rows(rows), total
 
+    def get_incident_detail(
+        self,
+        incident_id: int,
+    ) -> dict[str, Any] | None:
+        """Return one incident with its detection evidence and response."""
+
+        with self._connection() as connection:
+            incident_row = connection.execute(
+                """
+                SELECT
+                    id,
+                    source_ip,
+                    username,
+                    attempt_count,
+                    first_seen,
+                    last_seen,
+                    window_seconds,
+                    status,
+                    response_outcome
+                FROM incidents
+                WHERE id = ?
+                """,
+                (incident_id,),
+            ).fetchone()
+
+            if incident_row is None:
+                return None
+
+            incident = dict(incident_row)
+            authentication_rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    event_type,
+                    username,
+                    source_ip,
+                    source_port,
+                    invalid_user,
+                    timestamp
+                FROM auth_events
+                WHERE
+                    event_type = 'failed_login'
+                    AND source_ip = ?
+                    AND (
+                        username = ?
+                        OR (username IS NULL AND ? IS NULL)
+                    )
+                    AND timestamp >= ?
+                    AND timestamp <= ?
+                ORDER BY timestamp, id
+                """,
+                (
+                    incident["source_ip"],
+                    incident["username"],
+                    incident["username"],
+                    incident["first_seen"],
+                    incident["last_seen"],
+                ),
+            ).fetchall()
+            firewall_rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    source_ip,
+                    action,
+                    timestamp,
+                    expires_at,
+                    incident_id,
+                    related_action_id
+                FROM firewall_actions
+                WHERE incident_id = ?
+                ORDER BY timestamp, id
+                """,
+                (incident_id,),
+            ).fetchall()
+
+        authentication_events = self._rows(authentication_rows)
+        for event in authentication_events:
+            event["invalid_user"] = bool(event["invalid_user"])
+
+        return {
+            "incident": incident,
+            "authentication_events": authentication_events,
+            "firewall_actions": self._rows(firewall_rows),
+        }
+
     def firewall_reconciliation(self) -> dict[str, Any]:
         """Return the latest report-only enforcement comparison."""
 

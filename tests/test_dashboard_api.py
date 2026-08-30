@@ -103,6 +103,31 @@ class DashboardApiTests(unittest.TestCase):
         self.assertEqual(payload["pagination"]["total"], 1)
         self.assertEqual(payload["items"][0]["source_ip"], "192.0.2.44")
 
+    def test_incident_detail_links_evidence_and_response(self):
+        response = self.client.get("/api/v1/incidents/1")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["incident"]["id"], 1)
+        self.assertEqual(
+            payload["authentication_events"][0]["source_ip"],
+            "192.0.2.44",
+        )
+        self.assertIs(
+            payload["authentication_events"][0]["invalid_user"],
+            True,
+        )
+        self.assertEqual(
+            payload["firewall_actions"][0]["incident_id"],
+            1,
+        )
+
+    def test_missing_incident_detail_returns_not_found(self):
+        response = self.client.get("/api/v1/incidents/999")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Incident not found")
+
     def test_authentication_events_preserve_boolean_type(self):
         response = self.client.get(
             "/api/v1/authentication-events",
