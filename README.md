@@ -14,9 +14,9 @@ The project is currently deployed and tested on a Raspberry Pi 4 running Debian 
 
 ## Team
 
-- Mohammed Jumaa Al-Tahla
-- Nada
-- Doha
+- Mohammed Jumaa Abdullah Al-Tahleh
+- Nada Nizar Saleh Abu Nada
+- Duha Marwan Mohammed Odeh Allah
 
 ---
 
